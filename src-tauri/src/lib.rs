@@ -7,19 +7,33 @@ use tauri::Manager;
 /// Proceso del sidecar gestionado por la app.
 struct Sidecar(Mutex<Option<Child>>);
 
-/// Lanza el sidecar (FastAPI). En dev usa el venv del proyecto; configurable por
-/// variables de entorno para producción (venv embebido — Fase 3 empaquetado).
-fn spawn_sidecar() -> Option<Child> {
-    let python = std::env::var("AUDIO2TAB_PYTHON")
-        .unwrap_or_else(|_| ".venv/Scripts/python.exe".to_string());
+/// Lanza el sidecar (FastAPI). Detecta en runtime si se está ejecutando desde
+/// el paquete instalado (usando resource_dir) o desde el área de trabajo local.
+fn spawn_sidecar(app_handle: &tauri::AppHandle) -> Option<Child> {
+    let python = std::env::var("AUDIO2TAB_PYTHON").unwrap_or_else(|_| {
+        let bundled_python = app_handle.path().resource_dir()
+            .map(|p| p.join(".venv/Scripts/python.exe"))
+            .unwrap_or_default();
+        if bundled_python.exists() {
+            bundled_python.to_string_lossy().to_string()
+        } else {
+            ".venv/Scripts/python.exe".to_string()
+        }
+    });
 
     let mut cmd = Command::new(python);
     cmd.args(["-m", "sidecar"]).env("PYTHONUTF8", "1");
 
     // Directorio de trabajo: donde está el paquete `sidecar` (y .mt3_checkpoints).
-    if let Ok(dir) = std::env::var("AUDIO2TAB_CWD") {
-        cmd.current_dir(dir);
-    }
+    let cwd = std::env::var("AUDIO2TAB_CWD").unwrap_or_else(|_| {
+        let bundled_cwd = app_handle.path().resource_dir().unwrap_or_default();
+        if bundled_cwd.join("sidecar").exists() {
+            bundled_cwd.to_string_lossy().to_string()
+        } else {
+            ".".to_string()
+        }
+    });
+    cmd.current_dir(cwd);
 
     match cmd.spawn() {
         Ok(child) => {
@@ -53,7 +67,7 @@ pub fn run() {
                         .build(),
                 )?;
             }
-            app.manage(Sidecar(Mutex::new(spawn_sidecar())));
+            app.manage(Sidecar(Mutex::new(spawn_sidecar(app.handle()))));
             Ok(())
         })
         .build(tauri::generate_context!())

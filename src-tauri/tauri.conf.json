@@ -32,6 +32,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "../.venv/**/*",
+      "../sidecar/**/*",
+      "../.mt3_checkpoints/**/*"
+    ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }

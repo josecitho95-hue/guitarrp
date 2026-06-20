@@ -55,5 +55,14 @@ probada. En cualquier caso, conviene **separar las dependencias de transcripció
 arrastrar TensorFlow (evaluar reemplazar `basic-pitch[onnx]` por solo el modelo ONNX, ya que
 mr_mt3 es el transcriptor por defecto).
 
+### Limitación de WiX (MSI) detectada en Fase 3
+Durante la compilación final (`npm run build`), el enlazador de WiX (`light.exe`) intenta compilar y empaquetar recursivamente los más de 20,000 archivos del entorno virtual de Python (.venv de ~4.56 GB) en un único archivo MSI. Esto supera los límites de memoria y del compilador de WiX, fallando por agotamiento de recursos o bloqueando el sistema.
+
+**Solución aplicada:**
+Para uso personal y local, se compila el ejecutable portátil `app.exe` sin empaquetar el MSI (`tauri build --no-bundle`).
+En [lib.rs](file:///c:/Users/Josec/Escritorio/Guitar%20pro/src-tauri/src/lib.rs) se implementó una **lógica de detección en runtime** para resolver esto:
+1. Comprueba si los recursos existen en el directorio de instalación (`resource_dir`). Si es así, ejecuta desde allí (para futuras compilaciones ligeras o si se usa un instalador).
+2. Si no están en `resource_dir` (ejecución directa de `app.exe` en local), cae hacia atrás (fallback) automáticamente buscando la carpeta local `.venv/Scripts/python.exe` y la carpeta de desarrollo `sidecar/` del área de trabajo. Esto permite que el binario optimizado funcione perfectamente en producción de forma local.
+
 > Artefactos de la prueba (`dist_pkg/`, `build_pkg/`, ~5 GB) eliminados tras validar; el log
 > completo quedó en `logs/pyinstaller.log` (gitignored).

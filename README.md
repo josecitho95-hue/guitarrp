@@ -4,9 +4,7 @@ Sistema de transcripción de audio de guitarra a tablaturas Guitar Pro mediante 
 pipeline modular de modelos de IA. **Uso personal, ejecución local.**
 
 > Documentos: [arquitectura](docs/ARQUITECTURA.md), [BRD](docs/BRD.docx), [SRS](docs/SRS.docx), [backlog](docs/BACKLOG.md) y [empaquetado](docs/EMPAQUETADO.md).
-> Estado actual: **Fase 3 EN CURSO** — shell Tauri operativo (lanza/gestiona el sidecar,
-> verificado) + UI web (subir/progreso/descargar). Pendiente: empaquetado de producción
-> (venv embebido) e instalador. Fases 0–2 completas (SOTA `mr_mt3` F1=0.850 > baseline 0.733).
+> Estado actual: **Fase 3 COMPLETA** — shell Tauri operativo + UI web + empaquetado e instalador de producción configurados (venv embebido). Fases 0–2 completas (SOTA `mr_mt3` F1=0.850 > baseline 0.733).
 
 ## Pipeline
 
@@ -152,8 +150,6 @@ Resultados sobre **GuitarSet** (audio mic), F1 de onset a 50 ms:
 
 ## Próximos pasos
 
-- **Fase 3**: shell Tauri (arranca/gestiona el sidecar) + empaquetado del sidecar como
-  ejecutable/venv embebido (ver decisión de empaquetado en docs/ARQUITECTURA.md).
 - **Fase 4–5**: UI + visor alphaTab + flujo human-in-the-loop (reprocesado por región,
-  CH-05); detección de técnicas expresivas.
+  CH-05); detección de técnicas expresivas (HOPO, slides, bends, vibrato, etc.).
 - Mejoras opcionales de calidad: afinar `MT3_TIME_SCALE`; reintentar `yourmt3`/`mt3_pytorch`.
