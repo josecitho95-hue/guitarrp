@@ -44,6 +44,15 @@ python -m venv .venv
 Opciones: `--bpm`, `--onset-threshold`, `--min-note-ms`, `--work-dir`, formato por
 extensión de `-o` (`.gp5` por defecto, `.gp4`, `.gp3`).
 
+## Tests
+
+Tests de humo del núcleo (digitación + inhibición + export GP), rápidos y sin modelos pesados:
+
+```bash
+python tests/test_pipeline.py        # runner standalone
+python -m pytest tests/ -q           # si tienes pytest
+```
+
 ## Estructura
 
 ```
