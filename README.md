@@ -3,10 +3,10 @@
 Sistema de transcripción de audio de guitarra a tablaturas Guitar Pro mediante un
 pipeline modular de modelos de IA. **Uso personal, ejecución local.**
 
-> Documentos: [arquitectura](docs/ARQUITECTURA.md), [BRD](docs/BRD.docx), [SRS](docs/SRS.docx) y [backlog](docs/BACKLOG.md).
-> Estado actual: **Fase 2 EN CURSO** — sidecar FastAPI local (cola en proceso + SQLite, F1–F4)
-> operativo, con SH-01 (calibración) y SH-02 (cuerdas al aire). Fases 0 y 1 completas
-> (SOTA `mr_mt3` F1=0.850 > baseline 0.733).
+> Documentos: [arquitectura](docs/ARQUITECTURA.md), [BRD](docs/BRD.docx), [SRS](docs/SRS.docx), [backlog](docs/BACKLOG.md) y [empaquetado](docs/EMPAQUETADO.md).
+> Estado actual: **Fase 2 COMPLETA** — sidecar FastAPI local (cola en proceso + SQLite, F1–F4)
+> con SH-01/SH-02, y validación de empaquetado ([PyInstaller torch+CUDA funciona](docs/EMPAQUETADO.md)).
+> Fases 0 y 1 completas (SOTA `mr_mt3` F1=0.850 > baseline 0.733).
 
 ## Pipeline
 
