@@ -95,6 +95,8 @@ $("go").addEventListener("click", async () => {
   fd.append("transcriber", $("transcriber").dataset.value);
   fd.append("output_format", $("output_format").value);
   fd.append("open_string_pref", $("open_string_pref").dataset.value);
+  fd.append("tuning", $("tuning").value);
+  fd.append("capo", $("capo").value);
   fd.append("auto_bpm", $("auto_bpm").checked);
   fd.append("bpm", $("bpm").value);
   fd.append("separate", separate);
@@ -156,12 +158,57 @@ function poll(id) {
   }, 700);
 }
 
+let atApi = null;
+
+function initAlphaTab(fileUrl) {
+  if (atApi) {
+    atApi.destroy();
+    atApi = null;
+  }
+
+  const element = $("alphaTab");
+  atApi = new alphaTab.AlphaTabApi(element, {
+    file: fileUrl,
+    player: {
+      enablePlayer: true,
+      soundFont: "https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.8.3/dist/soundfont/sonivox.sf2",
+      scrollElement: document.querySelector(".at-viewport")
+    }
+  });
+
+  const playBtn = $("play-btn");
+  const pauseBtn = $("pause-btn");
+  const stopBtn = $("stop-btn");
+
+  atApi.playPauseChanged.on((e) => {
+    if (e.state === 1) { // 1 = Playing
+      playBtn.style.display = "none";
+      pauseBtn.style.display = "inline-flex";
+    } else { // 0 = Paused / Stopped
+      playBtn.style.display = "inline-flex";
+      pauseBtn.style.display = "none";
+    }
+  });
+
+  playBtn.onclick = () => atApi.play();
+  pauseBtn.onclick = () => atApi.pause();
+  stopBtn.onclick = () => atApi.stop();
+}
+
 function showResult(id, j) {
   $("processing").hidden = true;
   $("result").hidden = false;
   const bpmTxt = j.bpm ? ` · ${Math.round(j.bpm)} BPM` : "";
   $("result-summary").textContent = `${j.n_notes ?? "?"} notas transcritas${bpmTxt} · ${$("output_format").value.toUpperCase()}`;
   $("download").href = `${API}/jobs/${id}/result`;
+
+  // Ensanchar la interfaz para la partitura
+  document.querySelector(".stage").classList.add("is-wide");
+  document.querySelector('.panel[data-panel="3"]').classList.add("is-wide");
+
+  // Inicializar alphaTab
+  const gpUrl = `${API}/jobs/${id}/result`;
+  initAlphaTab(gpUrl);
 }
 
 function showError(msg) {
@@ -172,6 +219,16 @@ function showError(msg) {
 
 function reset() {
   clearInterval(pollTimer);
+
+  // Restaurar el ancho normal de la interfaz
+  document.querySelector(".stage").classList.remove("is-wide");
+  document.querySelector('.panel[data-panel="3"]').classList.remove("is-wide");
+
+  if (atApi) {
+    atApi.destroy();
+    atApi = null;
+  }
+
   goStep(1);
 }
 $("again").addEventListener("click", reset);

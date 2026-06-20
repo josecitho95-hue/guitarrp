@@ -106,6 +106,53 @@ def test_export_gp3():
     _roundtrip(".gp3")
 
 
+def test_techniques_legato_and_slides():
+    from sidecar.pipeline import techniques
+    # Crear dos notas consecutivas en la misma cuerda (1) con diferencia de 1 traste -> HOPO
+    n1 = TabNote(pitch=64, start=0.0, end=0.45, string=1, fret=0)
+    n2 = TabNote(pitch=65, start=0.46, end=0.9, string=1, fret=1) # start - end = 0.01 <= 0.08
+
+    # Crear dos notas consecutivas con salto de 4 trastes -> Slide (fret > 0 para ambas)
+    n3 = TabNote(pitch=66, start=1.0, end=1.45, string=1, fret=2)
+    n4 = TabNote(pitch=70, start=1.46, end=1.9, string=1, fret=6) # 6 - 2 = 4 (slide)
+
+    tab = techniques.detect_techniques([n1, n2, n3, n4])
+    assert tab[1].hopo is True
+    assert tab[1].slide is False
+    assert tab[3].slide is True
+    assert tab[3].hopo is False
+
+
+def test_techniques_bend_and_vibrato():
+    from sidecar.pipeline import techniques
+    # Nota con pitch bends oscilantes -> vibrato
+    pb = [(i * 0.05, 500 if i % 2 == 0 else 100) for i in range(10)] # oscilación entre 100 y 500
+    n1 = TabNote(pitch=60, start=0.0, end=0.8, string=2, fret=1, pitch_bends=pb)
+
+    # Nota con pitch bend alto -> bend (8191 = 2 semitonos = 4 quarters)
+    pb_bend = [(0.0, 0), (0.2, 8191)]
+    n2 = TabNote(pitch=60, start=1.0, end=1.8, string=2, fret=1, pitch_bends=pb_bend)
+
+    tab = techniques.detect_techniques([n1, n2])
+    assert tab[0].vibrato is True
+    assert tab[1].bend_type == "bend"
+    assert tab[1].bend_value == 4 # 2 semitonos = 4 quarters
+
+
+def test_capo_and_tuning_export():
+    with tempfile.TemporaryDirectory() as d:
+        out = os.path.join(d, "tuning_test.gp5")
+        tuning = {1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 38}
+        tn = TabNote(pitch=45, start=0.0, end=1.0, string=6, fret=7)
+
+        to_gp.write_gp([tn], out, bpm=120, title="TuningTest", tuning=tuning, capo=2)
+        song = gp.parse(out)
+
+        track = song.tracks[0]
+        assert track.offset == 2
+        assert track.strings[5].value == 38 # Drop D
+
+
 # --- Runner standalone (sin pytest) ---
 
 if __name__ == "__main__":

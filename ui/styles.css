@@ -197,3 +197,70 @@ select:focus, input[type="number"]:focus { outline: none; border-color: var(--ac
 .error-badge { background: rgba(255,107,107,0.15); color: var(--err); font-size: 34px; font-weight: 800; }
 @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
 .error-text { color: var(--err); }
+
+/* Visor alphaTab y controles de reproducción */
+.tab-container {
+  margin: 20px 0;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 18px;
+  overflow: hidden;
+}
+.tab-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+  justify-content: flex-start;
+  align-items: center;
+}
+.btn-ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+.ctrl-icon {
+  width: 16px;
+  height: 16px;
+}
+.at-viewport {
+  width: 100%;
+  overflow-x: auto;
+  background: #ffffff; /* Fondo blanco para la partitura */
+  border-radius: 8px;
+  min-height: 320px;
+  border: 1px solid var(--border);
+}
+#alphaTab {
+  padding: 10px;
+  width: 100%;
+}
+
+/* Rediseño dinámico ancho para partitura */
+.stage.is-wide {
+  max-width: 900px !important;
+  transition: max-width 0.4s ease-in-out;
+}
+.panel.is-wide {
+  max-width: 900px !important;
+  transition: max-width 0.4s ease-in-out;
+}
+.result-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  align-items: center;
+}
+.result-actions .btn {
+  margin: 0;
+  flex: 1;
+}
+
+/* alphaTab custom override styles (para integrarse en la estética) */
+.at-cursor {
+  background: rgba(255, 140, 66, 0.25) !important;
+  border-left: 2px solid var(--accent) !important;
+}
+

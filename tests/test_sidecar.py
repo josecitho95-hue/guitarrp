@@ -28,6 +28,7 @@ def test_job_lifecycle_from_midi():
     with TestClient(app) as client:
         assert client.get("/healthz").json()["status"] == "ok"
 
+        # 1. Job estándar
         with open(midi, "rb") as f:
             r = client.post(
                 "/jobs",
@@ -50,6 +51,31 @@ def test_job_lifecycle_from_midi():
         r = client.get(f"/jobs/{job_id}/result")
         assert r.status_code == 200
         assert r.content[:4] == b"FICH" or len(r.content) > 100  # GP file
+
+        # 2. Job con afinación personalizada y capo
+        with open(midi, "rb") as f:
+            r = client.post(
+                "/jobs",
+                files={"file": ("riff.mid", f, "audio/midi")},
+                data={
+                    "from_midi": "true",
+                    "output_format": "gp5",
+                    "bpm": "120",
+                    "tuning": "drop_d",
+                    "capo": "2"
+                },
+            )
+        assert r.status_code == 200, r.text
+        job_id_2 = r.json()["id"]
+
+        status_2 = {}
+        for _ in range(60):
+            status_2 = client.get(f"/jobs/{job_id_2}").json()
+            if status_2["status"] in ("done", "error"):
+                break
+            time.sleep(0.5)
+
+        assert status_2["status"] == "done", status_2
 
 
 if __name__ == "__main__":

@@ -56,18 +56,36 @@ def _decompose(slots: int, cap: int) -> list[tuple[int, bool]]:
     return out
 
 
-def _make_beat(voice, value: int, dotted: bool, notes: list[tuple[int, int, int]]):
-    """Crea un Beat. notes = lista de (cuerda, traste, velocidad); vacio = silencio."""
+def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote]):
+    """Crea un Beat con notas y sus respectivos efectos (Tier 1)."""
     beat = M.Beat(voice)
     beat.duration = M.Duration(value=value, isDotted=dotted)
-    if notes:
+    if tab_notes:
         beat.status = M.BeatStatus.normal
-        for string, fret, vel in notes:
+        for tn in tab_notes:
             note = M.Note(beat)
-            note.value = fret
-            note.string = string
-            note.velocity = vel
+            note.value = tn.fret
+            note.string = tn.string
+            note.velocity = tn.velocity
             note.type = M.NoteType.normal
+
+            # Aplicar efectos (Tier 1)
+            if tn.hopo:
+                note.effect.hammerPullOff = True
+            if tn.slide:
+                note.effect.slides = [M.SlideType.legatoSlideTo]
+            if tn.vibrato:
+                note.effect.vibrato = True
+            if tn.bend_type and tn.bend_value > 0:
+                note.effect.bend = M.BendEffect(
+                    type=M.BendType.bend,
+                    value=int(round(tn.bend_value)),
+                    points=[
+                        M.BendPoint(position=0, value=0),
+                        M.BendPoint(position=6, value=int(round(tn.bend_value))),
+                        M.BendPoint(position=12, value=int(round(tn.bend_value))),
+                    ]
+                )
             beat.notes.append(note)
     else:
         beat.status = M.BeatStatus.rest
@@ -75,13 +93,18 @@ def _make_beat(voice, value: int, dotted: bool, notes: list[tuple[int, int, int]
 
 
 def build_song(tab_notes: list[TabNote], bpm: float = 120.0, title: str = "Audio2Tab",
-               tuning: dict[int, int] | None = None) -> M.Song:
+               tuning: dict[int, int] | None = None, capo: int = 0) -> M.Song:
     song = M.Song()
     song.title = title
     song.artist = "Audio2Tab"
     song.tempo = int(round(bpm))
     track = song.tracks[0]
     track.name = "Guitar"
+    track.offset = capo
+    if tuning:
+        for string_idx, midi in tuning.items():
+            if 0 <= string_idx - 1 < len(track.strings):
+                track.strings[string_idx - 1].value = midi
 
     grid = (60.0 / bpm) / 4.0   # segundos por semicorchea
 
@@ -140,8 +163,7 @@ def build_song(tab_notes: list[TabNote], bpm: float = 120.0, title: str = "Audio
                 notes = slot_to_event[t]
                 cap = m_end - t
                 s, value, dotted = _largest_fit(ev_dur[t], cap)
-                payload = [(tn.string, tn.fret, tn.velocity) for tn in notes]
-                voice.beats.append(_make_beat(voice, value, dotted, payload))
+                voice.beats.append(_make_beat(voice, value, dotted, notes))
                 t += s
             else:
                 # silencio hasta el proximo evento o fin de compas
@@ -161,10 +183,11 @@ def build_song(tab_notes: list[TabNote], bpm: float = 120.0, title: str = "Audio
 
 
 def write_gp(tab_notes: list[TabNote], out_path: str, bpm: float = 120.0,
-             title: str = "Audio2Tab") -> str:
+             title: str = "Audio2Tab", tuning: dict[int, int] | None = None,
+             capo: int = 0) -> str:
     ext = os.path.splitext(out_path)[1].lower()
     if ext not in _EXT_TO_VERSION:
         raise ValueError(f"Formato no soportado: {ext} (usa .gp5/.gp4/.gp3)")
-    song = build_song(tab_notes, bpm=bpm, title=title)
+    song = build_song(tab_notes, bpm=bpm, title=title, tuning=tuning, capo=capo)
     gp.write(song, out_path, version=_EXT_TO_VERSION[ext])
     return out_path

@@ -103,6 +103,22 @@
         </div>
       </div>
 
+      <div class="grid-2">
+        <div class="field">
+          <span class="field-label">Afinación</span>
+          <div class="select-wrap">
+            <select id="tuning">
+              <option value="standard">Estándar (EADGBE)</option>
+              <option value="drop_d">Drop D (DADGBE)</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <span class="field-label">Capo (Traste)</span>
+          <input type="number" id="capo" value="0" min="0" max="12" />
+        </div>
+      </div>
+
       <label class="toggle">
         <input type="checkbox" id="auto_bpm" checked />
         <span class="track"><span class="thumb"></span></span>
@@ -154,8 +170,33 @@
         </div>
         <h2 class="panel-title center">¡Tablatura lista!</h2>
         <p class="panel-sub center" id="result-summary"></p>
-        <a id="download" class="btn btn-success" download>⬇ Descargar tablatura</a>
-        <button class="btn btn-ghost full" id="again">Transcribir otra</button>
+
+        <!-- Visor alphaTab -->
+        <div class="tab-container">
+          <div class="tab-controls">
+            <button id="play-btn" class="btn btn-ctrl" title="Reproducir">
+              <svg viewBox="0 0 24 24" class="ctrl-icon"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+              <span>Reproducir</span>
+            </button>
+            <button id="pause-btn" class="btn btn-ctrl" title="Pausar" style="display: none;">
+              <svg viewBox="0 0 24 24" class="ctrl-icon"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="currentColor"/></svg>
+              <span>Pausar</span>
+            </button>
+            <button id="stop-btn" class="btn btn-ctrl btn-ghost" title="Detener">
+              <svg viewBox="0 0 24 24" class="ctrl-icon"><path d="M6 6h12v12H6z" fill="currentColor"/></svg>
+              <span>Detener</span>
+            </button>
+          </div>
+
+          <div class="at-viewport">
+            <div id="alphaTab"></div>
+          </div>
+        </div>
+
+        <div class="result-actions">
+          <a id="download" class="btn btn-success" download>⬇ Descargar tablatura</a>
+          <button class="btn btn-ghost full" id="again">Transcribir otra</button>
+        </div>
       </div>
 
       <div id="failed" hidden>
@@ -167,6 +208,7 @@
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.8.3/dist/alphaTab.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

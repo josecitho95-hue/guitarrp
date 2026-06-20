@@ -43,6 +43,7 @@ def run(args: argparse.Namespace) -> int:
         auto_bpm=(args.bpm is None), bpm=(args.bpm or 120.0),
         output_format=args.output_format,
         calibrate_tuning=args.calibrate, open_string_pref=args.open_string_pref,
+        tuning=args.tuning, capo=args.capo,
         onset_threshold=args.onset_threshold, min_note_ms=args.min_note_ms,
         from_midi=args.from_midi,
     )
@@ -75,6 +76,9 @@ def main() -> int:
     ap.add_argument("--calibrate", action="store_true", help="Calibrar afinacion a A440 (SH-01)")
     ap.add_argument("--open-string-pref", default="media", choices=["alta", "media", "baja"],
                     help="Preferencia por cuerdas al aire (SH-02)")
+    ap.add_argument("--tuning", default="standard", choices=["standard", "drop_d"],
+                    help="Afinación de la guitarra")
+    ap.add_argument("--capo", type=int, default=0, help="Traste en el que se coloca el capo")
     ap.add_argument("--onset-threshold", type=float, default=0.5)
     ap.add_argument("--min-note-ms", type=float, default=80.0)
     ap.add_argument("--work-dir", help="Carpeta de artefactos intermedios")

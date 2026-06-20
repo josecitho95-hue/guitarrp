@@ -55,6 +55,8 @@ async def create_job(
     output_format: str = Form("gp5"),
     calibrate_tuning: bool = Form(False),
     open_string_pref: str = Form("media"),
+    tuning: str = Form("standard"),
+    capo: int = Form(0),
     from_midi: bool = Form(False),
 ) -> JobCreated:
     job_id = uuid.uuid4().hex[:12]
@@ -70,7 +72,7 @@ async def create_job(
         transcriber=transcriber, separate=separate, device=device,
         auto_bpm=auto_bpm, bpm=bpm, output_format=output_format,
         calibrate_tuning=calibrate_tuning, open_string_pref=open_string_pref,
-        from_midi=from_midi,
+        tuning=tuning, capo=capo, from_midi=from_midi,
     )
     db.create_job(job_id, in_path, params.__dict__)
     out_path = os.path.join(jd, f"output.{output_format.lstrip('.')}")

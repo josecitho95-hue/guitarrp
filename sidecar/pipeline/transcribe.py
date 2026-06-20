@@ -18,9 +18,17 @@ def notes_from_pretty_midi(pm) -> list[Note]:
     for inst in pm.instruments:
         if getattr(inst, "is_drum", False):
             continue
+        pb_list = [(float(pb.time), int(pb.value)) for pb in getattr(inst, "pitch_bends", [])]
         for n in inst.notes:
-            out.append(Note(pitch=int(n.pitch), start=float(n.start),
-                            end=float(n.end), velocity=int(n.velocity)))
+            note_bends = [
+                (t, v) for t, v in pb_list
+                if n.start - 0.02 <= t <= n.end + 0.02
+            ]
+            out.append(Note(
+                pitch=int(n.pitch), start=float(n.start),
+                end=float(n.end), velocity=int(n.velocity),
+                pitch_bends=note_bends
+            ))
     out.sort(key=lambda n: (n.start, n.pitch))
     return out
 

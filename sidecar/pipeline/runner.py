@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass
 from typing import Callable
 
-from . import preprocess, separate, to_gp, to_tab, transcribe
+from . import preprocess, separate, to_gp, to_tab, transcribe, techniques
 
 ProgressCb = Callable[[str, float], None]
 
@@ -26,6 +26,8 @@ class PipelineParams:
     output_format: str = "gp5"         # gp5 | gp4 | gp3
     calibrate_tuning: bool = False     # SH-01: cuadrar a A440
     open_string_pref: str = "media"    # SH-02: alta | media | baja
+    tuning: str = "standard"           # standard | drop_d
+    capo: int = 0                      # traste del capo (0 = sin capo)
     onset_threshold: float = 0.5
     min_note_ms: float = 80.0
     from_midi: bool = False
@@ -72,10 +74,18 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
         raise RuntimeError("No se detectaron notas en el audio.")
 
     prog("tabbing", 0.8)
-    tab = to_tab.assign_tab(notes, open_string_pref=params.open_string_pref)
+    tuning_dict = to_tab.TUNINGS.get(params.tuning, to_tab.STANDARD_TUNING)
+    digitizer_tuning = tuning_dict
+    if params.capo > 0:
+        digitizer_tuning = {string: pitch + params.capo for string, pitch in tuning_dict.items()}
+
+    tab = to_tab.assign_tab(notes, tuning=digitizer_tuning, open_string_pref=params.open_string_pref)
+
+    # Detectar técnicas expresivas (Tier 1)
+    tab = techniques.detect_techniques(tab)
 
     out_path = os.path.splitext(out_path)[0] + "." + params.output_format.lstrip(".")
-    to_gp.write_gp(tab, out_path, bpm=bpm, title=title)
+    to_gp.write_gp(tab, out_path, bpm=bpm, title=title, tuning=tuning_dict, capo=params.capo)
 
     prog("done", 1.0)
     return {"output": out_path, "n_notes": len(notes), "n_tab": len(tab), "bpm": round(bpm, 1)}

@@ -1,7 +1,7 @@
 """Tipos de datos compartidos del pipeline Audio2Tab (Fase 0)."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -12,6 +12,7 @@ class Note:
     start: float        # segundos
     end: float          # segundos
     velocity: int = 96
+    pitch_bends: list[tuple[float, int]] = field(default_factory=list)
 
     @property
     def duration(self) -> float:
@@ -24,3 +25,9 @@ class TabNote(Note):
 
     string: int = 1     # 1..6  (1 = Mi agudo, 6 = Mi grave, como en Guitar Pro)
     fret: int = 0
+    hopo: bool = False
+    slide: bool = False
+    vibrato: bool = False
+    bend_type: str | None = None
+    bend_value: int = 0
+

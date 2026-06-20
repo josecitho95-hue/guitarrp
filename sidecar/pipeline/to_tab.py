@@ -18,6 +18,11 @@ from .types import Note, TabNote
 # Afinacion estandar: numero de cuerda -> nota MIDI al aire (1 = Mi agudo).
 STANDARD_TUNING = {1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 40}
 
+TUNINGS = {
+    "standard": STANDARD_TUNING,
+    "drop_d": {1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 38},
+}
+
 MAX_FRET = 22
 ONSET_EPS = 0.035       # notas que empiezan dentro de esta ventana = acorde (s)
 MAX_EVENT_OPTIONS = 24  # poda de asignaciones por evento
@@ -126,6 +131,7 @@ def assign_tab(notes: list[Note], tuning: dict[int, int] | None = None,
             tab_notes.append(TabNote(
                 pitch=note.pitch, start=note.start, end=note.end,
                 velocity=note.velocity, string=string, fret=fret,
+                pitch_bends=note.pitch_bends,
             ))
     tab_notes.sort(key=lambda t: (t.start, -t.string))
     return tab_notes
