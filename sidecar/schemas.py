@@ -11,6 +11,7 @@ class JobStatus(BaseModel):
     progress: float = 0.0
     output_path: str | None = None
     n_notes: int | None = None
+    bpm: float | None = None
     error: str | None = None
 
 

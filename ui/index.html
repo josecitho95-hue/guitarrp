@@ -92,21 +92,25 @@
         </div>
       </div>
 
-      <div class="grid-2">
-        <div class="field">
-          <span class="field-label">Formato de salida</span>
-          <div class="select-wrap">
-            <select id="output_format">
-              <option value="gp5">Guitar Pro 5 (.gp5)</option>
-              <option value="gp4">Guitar Pro 4 (.gp4)</option>
-              <option value="gp3">Guitar Pro 3 (.gp3)</option>
-            </select>
-          </div>
+      <div class="field">
+        <span class="field-label">Formato de salida</span>
+        <div class="select-wrap">
+          <select id="output_format">
+            <option value="gp5">Guitar Pro 5 (.gp5)</option>
+            <option value="gp4">Guitar Pro 4 (.gp4)</option>
+            <option value="gp3">Guitar Pro 3 (.gp3)</option>
+          </select>
         </div>
-        <div class="field">
-          <span class="field-label">Tempo (BPM)</span>
-          <input type="number" id="bpm" value="120" min="40" max="300" />
-        </div>
+      </div>
+
+      <label class="toggle">
+        <input type="checkbox" id="auto_bpm" checked />
+        <span class="track"><span class="thumb"></span></span>
+        <span class="toggle-text"><b>Detectar tempo automáticamente</b><small>Estima el BPM de la canción. Desactívalo solo si quieres fijarlo a mano.</small></span>
+      </label>
+      <div class="field bpm-manual" id="bpm-field" hidden>
+        <span class="field-label">Tempo manual (BPM)</span>
+        <input type="number" id="bpm" value="120" min="40" max="300" />
       </div>
 
       <label class="toggle">

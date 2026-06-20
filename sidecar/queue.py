@@ -29,7 +29,8 @@ def _run(job_id: str, input_path: str, out_path: str,
         db.update_job(job_id, status="running", stage="preprocess", progress=0.01)
         result = run_pipeline(input_path, out_path, params, work_dir, on_progress)
         db.update_job(job_id, status="done", stage="done", progress=1.0,
-                      output_path=result["output"], n_notes=result["n_notes"])
+                      output_path=result["output"], n_notes=result["n_notes"],
+                      bpm=result.get("bpm"))
     except Exception as exc:  # noqa: BLE001
         db.update_job(job_id, status="error", stage="error", error=str(exc))
 

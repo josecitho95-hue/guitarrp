@@ -40,7 +40,8 @@ def run(args: argparse.Namespace) -> int:
 
     params = PipelineParams(
         transcriber=args.transcriber, separate=args.separate, device=args.device,
-        bpm=args.bpm, output_format=args.output_format,
+        auto_bpm=(args.bpm is None), bpm=(args.bpm or 120.0),
+        output_format=args.output_format,
         calibrate_tuning=args.calibrate, open_string_pref=args.open_string_pref,
         onset_threshold=args.onset_threshold, min_note_ms=args.min_note_ms,
         from_midi=args.from_midi,
@@ -53,7 +54,8 @@ def run(args: argparse.Namespace) -> int:
         log("error", str(exc))
         return 3
 
-    log("done", f"{result['n_notes']} notas -> {result['output']} en {time.time() - t0:.1f}s")
+    log("done", f"{result['n_notes']} notas @ {result.get('bpm')} BPM -> "
+                f"{result['output']} en {time.time() - t0:.1f}s")
     print(result["output"])
     return 0
 
@@ -68,7 +70,8 @@ def main() -> int:
                     help="Modelo audio->MIDI (def: mr_mt3, SOTA)")
     ap.add_argument("--separate", action="store_true", help="Aislar guitarra con Demucs")
     ap.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="Dispositivo Demucs")
-    ap.add_argument("--bpm", type=float, default=120.0, help="Tempo para la cuantizacion")
+    ap.add_argument("--bpm", type=float, default=None,
+                    help="Tempo manual; si se omite, se detecta automaticamente")
     ap.add_argument("--calibrate", action="store_true", help="Calibrar afinacion a A440 (SH-01)")
     ap.add_argument("--open-string-pref", default="media", choices=["alta", "media", "baja"],
                     help="Preferencia por cuerdas al aire (SH-02)")

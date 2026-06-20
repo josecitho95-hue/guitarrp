@@ -66,6 +66,11 @@ $("file-clear").addEventListener("click", (e) => {
 $("to-2").addEventListener("click", () => goStep(2));
 $("to-1").addEventListener("click", () => goStep(1));
 
+// BPM manual solo visible si se desactiva la detección automática
+$("auto_bpm").addEventListener("change", (e) => {
+  $("bpm-field").hidden = e.target.checked;
+});
+
 // ---------- Paso 2: controles segmentados ----------
 document.querySelectorAll(".segmented").forEach((seg) => {
   seg.addEventListener("click", (e) => {
@@ -90,6 +95,7 @@ $("go").addEventListener("click", async () => {
   fd.append("transcriber", $("transcriber").dataset.value);
   fd.append("output_format", $("output_format").value);
   fd.append("open_string_pref", $("open_string_pref").dataset.value);
+  fd.append("auto_bpm", $("auto_bpm").checked);
   fd.append("bpm", $("bpm").value);
   fd.append("separate", separate);
   fd.append("calibrate_tuning", $("calibrate_tuning").checked);
@@ -153,7 +159,8 @@ function poll(id) {
 function showResult(id, j) {
   $("processing").hidden = true;
   $("result").hidden = false;
-  $("result-summary").textContent = `${j.n_notes ?? "?"} notas transcritas · ${$("output_format").value.toUpperCase()}`;
+  const bpmTxt = j.bpm ? ` · ${Math.round(j.bpm)} BPM` : "";
+  $("result-summary").textContent = `${j.n_notes ?? "?"} notas transcritas${bpmTxt} · ${$("output_format").value.toUpperCase()}`;
   $("download").href = `${API}/jobs/${id}/result`;
 }
 

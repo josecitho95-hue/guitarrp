@@ -21,7 +21,8 @@ class PipelineParams:
     transcriber: str = "mr_mt3"        # "mr_mt3" (SOTA) | "basic_pitch"
     separate: bool = False             # aislar guitarra con Demucs
     device: str = "cpu"                # dispositivo Demucs: cpu | cuda
-    bpm: float = 120.0
+    auto_bpm: bool = True              # detectar el tempo automáticamente
+    bpm: float = 120.0                 # usado solo si auto_bpm=False (override)
     output_format: str = "gp5"         # gp5 | gp4 | gp3
     calibrate_tuning: bool = False     # SH-01: cuadrar a A440
     open_string_pref: str = "media"    # SH-02: alta | media | baja
@@ -46,11 +47,14 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
     if params.from_midi:
         prog("transcribing", 0.4)
         notes = transcribe.notes_from_midi_file(input_path)
+        bpm = preprocess.tempo_from_midi(input_path) if params.auto_bpm else params.bpm
     else:
         prog("preprocess", 0.05)
         wav = preprocess.to_wav_mono(
             input_path, os.path.join(work_dir, "input.wav"),
             calibrate=params.calibrate_tuning)
+        # Tempo automático del audio (override manual si auto_bpm=False).
+        bpm = preprocess.estimate_tempo(wav) if params.auto_bpm else params.bpm
 
         if params.separate:
             prog("separating", 0.2)
@@ -71,7 +75,7 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
     tab = to_tab.assign_tab(notes, open_string_pref=params.open_string_pref)
 
     out_path = os.path.splitext(out_path)[0] + "." + params.output_format.lstrip(".")
-    to_gp.write_gp(tab, out_path, bpm=params.bpm, title=title)
+    to_gp.write_gp(tab, out_path, bpm=bpm, title=title)
 
     prog("done", 1.0)
-    return {"output": out_path, "n_notes": len(notes), "n_tab": len(tab)}
+    return {"output": out_path, "n_notes": len(notes), "n_tab": len(tab), "bpm": round(bpm, 1)}

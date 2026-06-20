@@ -72,8 +72,9 @@ python -m sidecar          # arranca en http://127.0.0.1:8765
 ```
 
 Endpoints:
-- `POST /jobs` — multipart: `file` + params (`transcriber`, `separate`, `bpm`,
-  `output_format`, `calibrate_tuning`, `open_string_pref`, `from_midi`) → `{id}`.
+- `POST /jobs` — multipart: `file` + params (`transcriber`, `separate`, `auto_bpm`,
+  `bpm`, `output_format`, `calibrate_tuning`, `open_string_pref`, `from_midi`) → `{id}`.
+  El tempo se **detecta automáticamente** (`auto_bpm=true`); `bpm` solo se usa como override.
 - `GET /jobs/{id}` — estado: `queued|running|done|error`, `stage`, `progress`, `n_notes`.
 - `GET /jobs/{id}/result` — descarga el `.gp5/.gp4/.gp3`.
 - `GET /jobs` · `GET /healthz`.

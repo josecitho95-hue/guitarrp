@@ -29,6 +29,7 @@ def init_db() -> None:
             params      TEXT,
             error       TEXT,
             n_notes     INTEGER,
+            bpm         REAL,
             created_at  REAL,
             updated_at  REAL
         )

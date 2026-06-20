@@ -50,6 +50,7 @@ async def create_job(
     transcriber: str = Form("mr_mt3"),
     separate: bool = Form(False),
     device: str = Form("cpu"),
+    auto_bpm: bool = Form(True),
     bpm: float = Form(120.0),
     output_format: str = Form("gp5"),
     calibrate_tuning: bool = Form(False),
@@ -66,9 +67,10 @@ async def create_job(
         f.write(await file.read())
 
     params = PipelineParams(
-        transcriber=transcriber, separate=separate, device=device, bpm=bpm,
-        output_format=output_format, calibrate_tuning=calibrate_tuning,
-        open_string_pref=open_string_pref, from_midi=from_midi,
+        transcriber=transcriber, separate=separate, device=device,
+        auto_bpm=auto_bpm, bpm=bpm, output_format=output_format,
+        calibrate_tuning=calibrate_tuning, open_string_pref=open_string_pref,
+        from_midi=from_midi,
     )
     db.create_job(job_id, in_path, params.__dict__)
     out_path = os.path.join(jd, f"output.{output_format.lstrip('.')}")
@@ -89,7 +91,7 @@ def job_status(job_id: str) -> JobStatus:
     return JobStatus(
         id=j["id"], status=j["status"], stage=j.get("stage"),
         progress=j.get("progress") or 0.0, output_path=j.get("output_path"),
-        n_notes=j.get("n_notes"), error=j.get("error"),
+        n_notes=j.get("n_notes"), bpm=j.get("bpm"), error=j.get("error"),
     )
 
 
