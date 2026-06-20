@@ -7,33 +7,53 @@ use tauri::Manager;
 /// Proceso del sidecar gestionado por la app.
 struct Sidecar(Mutex<Option<Child>>);
 
-/// Lanza el sidecar (FastAPI). Detecta en runtime si se está ejecutando desde
-/// el paquete instalado (usando resource_dir) o desde el área de trabajo local.
-fn spawn_sidecar(app_handle: &tauri::AppHandle) -> Option<Child> {
-    let python = std::env::var("AUDIO2TAB_PYTHON").unwrap_or_else(|_| {
-        let bundled_python = app_handle.path().resource_dir()
-            .map(|p| p.join(".venv/Scripts/python.exe"))
-            .unwrap_or_default();
-        if bundled_python.exists() {
-            bundled_python.to_string_lossy().to_string()
-        } else {
-            ".venv/Scripts/python.exe".to_string()
+fn resolve_local_paths(app_handle: &tauri::AppHandle) -> (String, String) {
+    // 1. Intentar resolver desde resource_dir (producción empaquetada)
+    if let Ok(resource_path) = app_handle.path().resource_dir() {
+        let python_path = resource_path.join(".venv/Scripts/python.exe");
+        let sidecar_dir = resource_path.join("sidecar");
+        if python_path.exists() && sidecar_dir.exists() {
+            return (
+                python_path.to_string_lossy().to_string(),
+                resource_path.to_string_lossy().to_string(),
+            );
         }
-    });
+    }
+
+    // 2. Fallback de desarrollo/ejecución local: buscar subiendo directorios desde el ejecutable actual
+    if let Ok(exe_path) = std::env::current_exe() {
+        let mut dir = exe_path.parent();
+        while let Some(d) = dir {
+            let python_path = d.join(".venv/Scripts/python.exe");
+            let sidecar_dir = d.join("sidecar");
+            if python_path.exists() && sidecar_dir.exists() {
+                return (
+                    python_path.to_string_lossy().to_string(),
+                    d.to_string_lossy().to_string(),
+                );
+            }
+            dir = d.parent();
+        }
+    }
+
+    // 3. Fallback final relativo (si todo lo demás falla)
+    (".venv/Scripts/python.exe".to_string(), ".".to_string())
+}
+
+/// Lanza el sidecar (FastAPI). Detecta en runtime si se está ejecutando desde
+/// el paquete instalado o resolviendo dinámicamente desde el área de trabajo local.
+fn spawn_sidecar(app_handle: &tauri::AppHandle) -> Option<Child> {
+    let (resolved_python, resolved_cwd) = resolve_local_paths(app_handle);
+
+    let python = std::env::var("AUDIO2TAB_PYTHON").unwrap_or(resolved_python);
+    let cwd = std::env::var("AUDIO2TAB_CWD").unwrap_or(resolved_cwd);
+
+    log::info!("Lanzando sidecar: python={}, cwd={}", python, cwd);
 
     let mut cmd = Command::new(python);
     cmd.args(["-m", "sidecar"]).env("PYTHONUTF8", "1");
-
-    // Directorio de trabajo: donde está el paquete `sidecar` (y .mt3_checkpoints).
-    let cwd = std::env::var("AUDIO2TAB_CWD").unwrap_or_else(|_| {
-        let bundled_cwd = app_handle.path().resource_dir().unwrap_or_default();
-        if bundled_cwd.join("sidecar").exists() {
-            bundled_cwd.to_string_lossy().to_string()
-        } else {
-            ".".to_string()
-        }
-    });
     cmd.current_dir(cwd);
+
 
     match cmd.spawn() {
         Ok(child) => {
