@@ -1,13 +1,16 @@
-"""Audio2Tab — CLI spike (Fase 0).
+"""Audio2Tab — CLI.
 
 Encadena las 5 etapas del pipeline sobre un archivo y produce un .gp5/.gp4/.gp3:
 
     preproceso -> [separacion] -> audio->MIDI -> MIDI->tab -> Guitar Pro
 
+Usa el mismo runner que el sidecar (sidecar.pipeline.runner).
+
 Ejemplos:
     python cli/transcribe.py samples/cancion.mp3 -o out.gp5
     python cli/transcribe.py riff.mid --from-midi -o riff.gp5 --bpm 100
-    python cli/transcribe.py mezcla.wav -o tab.gp5 --separate
+    python cli/transcribe.py mezcla.wav -o tab.gp5 --separate --device cuda
+    python cli/transcribe.py solo.wav --calibrate --open-string-pref alta
 """
 from __future__ import annotations
 
@@ -18,7 +21,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sidecar.pipeline import preprocess, separate, transcribe, to_tab, to_gp  # noqa: E402
+from sidecar.pipeline.runner import PipelineParams, run_pipeline  # noqa: E402
 
 
 def log(stage: str, msg: str) -> None:
@@ -33,64 +36,42 @@ def run(args: argparse.Namespace) -> int:
         return 2
 
     work_dir = args.work_dir or os.path.join("storage", "jobs", str(int(t0)))
-    os.makedirs(work_dir, exist_ok=True)
+    out_path = args.output or (os.path.splitext(in_path)[0] + f".{args.output_format}")
 
-    # --- Camino directo desde MIDI (salta etapas 1-3) ---
-    if args.from_midi:
-        log("transcribe", f"Cargando notas desde MIDI: {in_path}")
-        notes = transcribe.notes_from_midi_file(in_path)
-    else:
-        # Etapa 1: preproceso
-        wav = preprocess.to_wav_mono(in_path, os.path.join(work_dir, "input.wav"))
-        log("preprocess", f"Audio listo: {os.path.basename(wav)}")
+    params = PipelineParams(
+        transcriber=args.transcriber, separate=args.separate, device=args.device,
+        bpm=args.bpm, output_format=args.output_format,
+        calibrate_tuning=args.calibrate, open_string_pref=args.open_string_pref,
+        onset_threshold=args.onset_threshold, min_note_ms=args.min_note_ms,
+        from_midi=args.from_midi,
+    )
 
-        # Etapa 2: separacion (opcional)
-        if args.separate:
-            wav = separate.separate_guitar(wav, work_dir, device=args.device)
-            log("separate", f"Stem de guitarra: {os.path.basename(wav)}")
-        else:
-            log("separate", "omitida (usa --separate para aislar la guitarra)")
-
-        # Etapa 3: audio -> MIDI
-        if args.transcriber == "mr_mt3":
-            log("transcribe", "Transcribiendo audio a notas (MT3 / mr_mt3, SOTA)...")
-            notes = transcribe.transcribe_mt3(wav, model="mr_mt3")
-        else:
-            log("transcribe", "Transcribiendo audio a notas (Basic Pitch)...")
-            notes = transcribe.transcribe_audio(
-                wav, onset_threshold=args.onset_threshold,
-                min_note_length_ms=args.min_note_ms)
-
-    log("transcribe", f"{len(notes)} notas detectadas")
-    if not notes:
-        log("error", "No se detectaron notas; nada que exportar.")
+    try:
+        result = run_pipeline(in_path, out_path, params, work_dir,
+                              on_progress=lambda s, p: log(s, f"{int(p * 100)}%"))
+    except Exception as exc:  # noqa: BLE001
+        log("error", str(exc))
         return 3
 
-    # Etapa 4 + 4b: MIDI -> tab (digitacion + restricciones fisicas)
-    tab = to_tab.assign_tab(notes)
-    log("to_tab", f"{len(tab)} notas con digitacion asignada")
-
-    # Etapa 5: tab -> Guitar Pro
-    out_path = args.output or (os.path.splitext(in_path)[0] + ".gp5")
-    to_gp.write_gp(tab, out_path, bpm=args.bpm,
-                   title=os.path.splitext(os.path.basename(in_path))[0])
-    dt = time.time() - t0
-    log("to_gp", f"Escrito: {out_path}")
-    log("done", f"Completado en {dt:.1f}s")
-    print(out_path)
+    log("done", f"{result['n_notes']} notas -> {result['output']} en {time.time() - t0:.1f}s")
+    print(result["output"])
     return 0
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Audio2Tab CLI (Fase 0)")
+    ap = argparse.ArgumentParser(description="Audio2Tab CLI")
     ap.add_argument("input", help="Audio (mp3/wav) o MIDI de entrada")
-    ap.add_argument("-o", "--output", help="Salida .gp5/.gp4/.gp3 (def: <input>.gp5)")
+    ap.add_argument("-o", "--output", help="Salida (def: <input>.<formato>)")
+    ap.add_argument("--output-format", default="gp5", choices=["gp5", "gp4", "gp3"])
     ap.add_argument("--from-midi", action="store_true", help="La entrada ya es un MIDI")
     ap.add_argument("--transcriber", default="mr_mt3", choices=["mr_mt3", "basic_pitch"],
                     help="Modelo audio->MIDI (def: mr_mt3, SOTA)")
     ap.add_argument("--separate", action="store_true", help="Aislar guitarra con Demucs")
     ap.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="Dispositivo Demucs")
     ap.add_argument("--bpm", type=float, default=120.0, help="Tempo para la cuantizacion")
+    ap.add_argument("--calibrate", action="store_true", help="Calibrar afinacion a A440 (SH-01)")
+    ap.add_argument("--open-string-pref", default="media", choices=["alta", "media", "baja"],
+                    help="Preferencia por cuerdas al aire (SH-02)")
     ap.add_argument("--onset-threshold", type=float, default=0.5)
     ap.add_argument("--min-note-ms", type=float, default=80.0)
     ap.add_argument("--work-dir", help="Carpeta de artefactos intermedios")

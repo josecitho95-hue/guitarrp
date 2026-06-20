@@ -23,3 +23,8 @@ logs/
 
 # Checkpoints de modelos (grandes)
 .mt3_checkpoints/
+
+# Empaquetado (PyInstaller)
+build_pkg/
+dist_pkg/
+*.spec

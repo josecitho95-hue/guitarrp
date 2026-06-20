@@ -39,7 +39,8 @@ def _candidates(pitch: int, tuning: dict[int, int]) -> list[tuple[int, int]]:
     return out
 
 
-def _event_assignments(event: _Event, tuning: dict[int, int]) -> list[list[tuple[int, int]]]:
+def _event_assignments(event: _Event, tuning: dict[int, int],
+                       open_bonus: float | None = None) -> list[list[tuple[int, int]]]:
     """Asignaciones (cuerda, traste) factibles para las notas del evento.
 
     Filtra por la restriccion dura de `inhibition.chord_feasible` y ordena por
@@ -56,7 +57,7 @@ def _event_assignments(event: _Event, tuning: dict[int, int]) -> list[list[tuple
         if inhibition.chord_feasible(asg):
             feasible.append(asg)
 
-    feasible.sort(key=inhibition.chord_cost)
+    feasible.sort(key=lambda a: inhibition.chord_cost(a, open_bonus))
     return feasible[:MAX_EVENT_OPTIONS]
 
 
@@ -70,28 +71,34 @@ def _group_events(notes: list[Note]) -> list[_Event]:
     return events
 
 
-def assign_tab(notes: list[Note], tuning: dict[int, int] | None = None) -> list[TabNote]:
-    """Asigna (cuerda, traste) a cada nota via DP minimizando el coste total."""
+def assign_tab(notes: list[Note], tuning: dict[int, int] | None = None,
+               open_string_pref: str = "media") -> list[TabNote]:
+    """Asigna (cuerda, traste) a cada nota via DP minimizando el coste total.
+
+    `open_string_pref` (SH-02): "alta" | "media" | "baja" — preferencia por
+    cuerdas al aire.
+    """
     tuning = tuning or STANDARD_TUNING
     if not notes:
         return []
 
+    open_bonus = inhibition.OPEN_STRING_BONUS.get(open_string_pref, inhibition.W_OPEN_BONUS)
     events = _group_events(notes)
-    options = [_event_assignments(ev, tuning) for ev in events]
+    options = [_event_assignments(ev, tuning, open_bonus) for ev in events]
 
     n = len(events)
     best_cost = [dict() for _ in range(n)]   # idx_asignacion -> coste minimo
     back = [dict() for _ in range(n)]        # idx_asignacion -> idx previo
 
     for j, asg in enumerate(options[0]):
-        best_cost[0][j] = inhibition.chord_cost(asg)
+        best_cost[0][j] = inhibition.chord_cost(asg, open_bonus)
         back[0][j] = -1
 
     for i in range(1, n):
         if not options[i]:
             options[i] = options[i - 1][:1] if options[i - 1] else []
         for j, asg in enumerate(options[i]):
-            base = inhibition.chord_cost(asg)
+            base = inhibition.chord_cost(asg, open_bonus)
             best = None
             for pj, pcost in best_cost[i - 1].items():
                 c = pcost + base + inhibition.transition_cost(options[i - 1][pj], asg)

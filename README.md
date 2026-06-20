@@ -4,7 +4,9 @@ Sistema de transcripción de audio de guitarra a tablaturas Guitar Pro mediante 
 pipeline modular de modelos de IA. **Uso personal, ejecución local.**
 
 > Documentos: [arquitectura](docs/ARQUITECTURA.md), [BRD](docs/BRD.docx), [SRS](docs/SRS.docx) y [backlog](docs/BACKLOG.md).
-> Estado actual: **Fase 1 COMPLETA** — benchmark + SOTA integrado (`mr_mt3` F1=0.850 > baseline 0.733) + matriz de inhibición + gestión de VRAM. Fase 0 (CLI spike) completa.
+> Estado actual: **Fase 2 EN CURSO** — sidecar FastAPI local (cola en proceso + SQLite, F1–F4)
+> operativo, con SH-01 (calibración) y SH-02 (cuerdas al aire). Fases 0 y 1 completas
+> (SOTA `mr_mt3` F1=0.850 > baseline 0.733).
 
 ## Pipeline
 
@@ -43,6 +45,29 @@ python -m venv .venv
 
 Opciones: `--bpm`, `--onset-threshold`, `--min-note-ms`, `--work-dir`, formato por
 extensión de `-o` (`.gp5` por defecto, `.gp4`, `.gp3`).
+
+## Sidecar (API local — Fase 2)
+
+Backend FastAPI que el shell de escritorio (Tauri, Fase 3) lanzará como subproceso. Cola en
+proceso de un solo worker (serializa por VRAM) + estado en SQLite. Datos en `~/.audio2tab`
+(o `AUDIO2TAB_DATA`).
+
+```bash
+python -m sidecar          # arranca en http://127.0.0.1:8765
+```
+
+Endpoints:
+- `POST /jobs` — multipart: `file` + params (`transcriber`, `separate`, `bpm`,
+  `output_format`, `calibrate_tuning`, `open_string_pref`, `from_midi`) → `{id}`.
+- `GET /jobs/{id}` — estado: `queued|running|done|error`, `stage`, `progress`, `n_notes`.
+- `GET /jobs/{id}/result` — descarga el `.gp5/.gp4/.gp3`.
+- `GET /jobs` · `GET /healthz`.
+
+```bash
+# ejemplo
+curl -F "file=@cancion.wav" -F "transcriber=mr_mt3" -F "open_string_pref=alta" \
+     http://127.0.0.1:8765/jobs
+```
 
 ## Tests
 
@@ -111,7 +136,8 @@ Resultados sobre **GuitarSet** (audio mic), F1 de onset a 50 ms:
 
 ## Próximos pasos
 
-- **Fase 2**: empaquetado (Tauri + sidecar Python embebido), UI y flujo human-in-the-loop
-  con alphaTab; detección de técnicas expresivas.
-- Mejoras opcionales de calidad: afinar `MT3_TIME_SCALE`, y reintentar `yourmt3` (el MT3 más
-  potente) con un transformers anclado, o `mt3_pytorch` evitando el git-lfs en Windows.
+- **Fase 3**: shell Tauri (arranca/gestiona el sidecar) + empaquetado del sidecar como
+  ejecutable/venv embebido (ver decisión de empaquetado en docs/ARQUITECTURA.md).
+- **Fase 4–5**: UI + visor alphaTab + flujo human-in-the-loop (reprocesado por región,
+  CH-05); detección de técnicas expresivas.
+- Mejoras opcionales de calidad: afinar `MT3_TIME_SCALE`; reintentar `yourmt3`/`mt3_pytorch`.

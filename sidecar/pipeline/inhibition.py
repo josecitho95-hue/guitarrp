@@ -48,8 +48,18 @@ def chord_feasible(assignment) -> bool:
     return True
 
 
-def chord_cost(assignment) -> float:
-    """Coste ergonómico (blando) de tocar este evento."""
+# SH-02: bonificación a cuerdas al aire configurable por job.
+OPEN_STRING_BONUS = {"alta": 0.30, "media": W_OPEN_BONUS, "baja": 0.0}
+
+
+def chord_cost(assignment, open_bonus: float | None = None) -> float:
+    """Coste ergonómico (blando) de tocar este evento.
+
+    `open_bonus` ajusta la preferencia por cuerdas al aire (SH-02); si es None usa
+    el valor por defecto del módulo.
+    """
+    if open_bonus is None:
+        open_bonus = W_OPEN_BONUS
     fretted = _fretted(assignment)
     cost = 0.0
     if fretted:
@@ -60,7 +70,7 @@ def chord_cost(assignment) -> float:
     if len(strings) >= 2:
         gaps = (strings[-1] - strings[0]) - (len(strings) - 1)
         cost += W_STRING_SKIP * max(0, gaps)
-    cost -= W_OPEN_BONUS * sum(1 for _, f in assignment if f == 0)
+    cost -= open_bonus * sum(1 for _, f in assignment if f == 0)
     # ajuste por matriz aprendida, si está disponible
     learned = _load_learned()
     if learned is not None:
