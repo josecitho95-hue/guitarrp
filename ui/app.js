@@ -190,10 +190,21 @@ function initAlphaTab(fileUrl) {
     }
   });
 
-  playBtn.onclick = () => atApi.play();
-  pauseBtn.onclick = () => atApi.pause();
-  stopBtn.onclick = () => atApi.stop();
-}
+    playBtn.onclick = () => atApi.play();
+    pauseBtn.onclick = () => atApi.pause();
+    stopBtn.onclick = () => atApi.stop();
+
+    atApi.scoreLoaded.on((score) => {
+      const track = score.tracks[0];
+      if (track && track.staves[0] && track.staves[0].bars) {
+        const totalBars = track.staves[0].bars.length;
+        $("range-start").max = totalBars;
+        $("range-end").max = totalBars;
+        $("range-start").value = 1;
+        $("range-end").value = Math.min(4, totalBars);
+      }
+    });
+  }
 
 function showResult(id, j) {
   $("processing").hidden = true;
@@ -225,9 +236,14 @@ function reset() {
   document.querySelector('.panel[data-panel="3"]').classList.remove("is-wide");
 
   if (atApi) {
+    try {
+      atApi.clearPlaybackRangeHighlight();
+      atApi.playbackRange = null;
+    } catch(e) {}
     atApi.destroy();
     atApi = null;
   }
+  $("btn-clear-highlight").style.display = "none";
 
   goStep(1);
 }
@@ -238,3 +254,49 @@ $("retry").addEventListener("click", () => goStep(2));
 ping();
 setInterval(ping, 4000);
 goStep(1);
+
+// ---------- Selección de Rango (Fase 4 - Visual / Loop) ----------
+$("btn-highlight").addEventListener("click", () => {
+  if (!atApi || !atApi.score) return;
+  const track = atApi.score.tracks[0];
+  if (!track || !track.staves[0]) return;
+
+  const start = parseInt($("range-start").value) || 1;
+  const end = parseInt($("range-end").value) || 1;
+  const bars = track.staves[0].bars;
+  const totalBars = bars.length;
+
+  if (start < 1 || end < 1 || start > totalBars || end > totalBars || start > end) {
+    alert("Rango de compases inválido.");
+    return;
+  }
+
+  const startBar = bars[start - 1];
+  const endBar = bars[end - 1];
+
+  if (startBar && endBar && startBar.beats.length > 0 && endBar.beats.length > 0) {
+    const startBeat = startBar.beats[0];
+    const endBeat = endBar.beats[endBar.beats.length - 1];
+
+    // Resaltar visualmente
+    atApi.highlightPlaybackRange(startBeat, endBeat);
+
+    // Fijar el loop/playback range
+    atApi.playbackRange = {
+      startTick: startBeat.absoluteTick,
+      endTick: endBeat.absoluteTick + endBeat.duration
+    };
+
+    $("btn-clear-highlight").style.display = "inline-flex";
+  }
+});
+
+$("btn-clear-highlight").addEventListener("click", () => {
+  if (!atApi) return;
+  try {
+    atApi.clearPlaybackRangeHighlight();
+    atApi.playbackRange = null;
+  } catch(e) {}
+  $("btn-clear-highlight").style.display = "none";
+});
+

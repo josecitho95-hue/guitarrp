@@ -264,3 +264,62 @@ select:focus, input[type="number"]:focus { outline: none; border-color: var(--ac
   border-left: 2px solid var(--accent) !important;
 }
 
+/* Selección de Rango de Compases */
+.range-selection {
+  margin: 15px 0 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.range-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.range-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.range-field span {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.range-field input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  outline: none;
+}
+.range-field input:focus {
+  border-color: var(--accent);
+}
+.range-buttons {
+  display: flex;
+  gap: 10px;
+}
+.range-buttons .btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  flex: 1;
+}
+
+

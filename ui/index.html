@@ -193,6 +193,38 @@
           </div>
         </div>
 
+        <!-- Selección de Rango (Fase 4 - Visual / Loop) -->
+        <div class="range-selection">
+          <div class="range-title">
+            <svg class="ctrl-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 11a9 9 0 0 1 9 9" />
+              <path d="M4 4a16 16 0 0 1 16 16" />
+              <circle cx="5" cy="19" r="1" />
+            </svg>
+            <span>Selección de Región (Loop / Reprocesar)</span>
+          </div>
+          <div class="range-inputs">
+            <div class="range-field">
+              <span>Desde Compás</span>
+              <input type="number" id="range-start" value="1" min="1" />
+            </div>
+            <div class="range-field">
+              <span>Hasta Compás</span>
+              <input type="number" id="range-end" value="4" min="1" />
+            </div>
+          </div>
+          <div class="range-buttons">
+            <button id="btn-highlight" class="btn btn-ctrl btn-ghost">Seleccionar rango</button>
+            <button id="btn-clear-highlight" class="btn btn-ctrl btn-ghost" style="display: none;">Limpiar selección</button>
+            <button id="btn-reprocess-visual" class="btn btn-primary" title="Reprocesar Región (Disponible en Fase 5)" disabled>
+              Reprocesar Región
+            </button>
+          </div>
+          <p id="range-msg" class="panel-sub" style="font-size: 11px; margin-top: 4px; text-align: center; color: var(--muted);">
+            Puedes loop-reproducir o seleccionar el rango. (El reprocesado real requiere la Fase 5).
+          </p>
+        </div>
+
         <div class="result-actions">
           <a id="download" class="btn btn-success" download>⬇ Descargar tablatura</a>
           <button class="btn btn-ghost full" id="again">Transcribir otra</button>
