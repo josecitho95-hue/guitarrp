@@ -3,7 +3,7 @@
 Sistema de transcripción de audio de guitarra a tablaturas Guitar Pro mediante un
 pipeline modular de modelos de IA. **Uso personal, ejecución local.**
 
-> Documentos: plan de arquitectura, [BRD](docs/BRD.docx) y [SRS](docs/SRS.docx).
+> Documentos: [arquitectura](docs/ARQUITECTURA.md), [BRD](docs/BRD.docx), [SRS](docs/SRS.docx) y [backlog](docs/BACKLOG.md).
 > Estado actual: **Fase 1 COMPLETA** — benchmark + SOTA integrado (`mr_mt3` F1=0.850 > baseline 0.733) + matriz de inhibición + gestión de VRAM. Fase 0 (CLI spike) completa.
 
 ## Pipeline
