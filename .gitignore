@@ -17,3 +17,6 @@ docs/srs_pg*
 
 # Node
 node_modules/
+
+# Logs de instalación
+logs/

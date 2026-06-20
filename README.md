@@ -4,7 +4,7 @@ Sistema de transcripción de audio de guitarra a tablaturas Guitar Pro mediante 
 pipeline modular de modelos de IA. **Uso personal, ejecución local.**
 
 > Documentos: plan de arquitectura, [BRD](docs/BRD.docx) y [SRS](docs/SRS.docx).
-> Estado actual: **Fase 0 — CLI spike** (pipeline end-to-end funcional).
+> Estado actual: **Fase 1 — Benchmark de calidad** (infraestructura de medición + baseline + matriz de inhibición). Fase 0 (CLI spike) completa.
 
 ## Pipeline
 
@@ -54,6 +54,35 @@ samples/            # audio/MIDI de prueba y salidas .gp
 storage/jobs/       # artefactos intermedios por ejecución (gitignored)
 ```
 
+## Fase 1 — Benchmark de calidad
+
+Infraestructura para medir y comparar transcriptores sobre datos reales con tablatura
+"verdad", y elegir el principal por **F1 medido** (no por intuición).
+
+```bash
+# Requiere torch+CUDA, demucs, mir_eval, mirdata (ver requirements-fase1.txt)
+python bench/run_benchmark.py --dataset guitarset --n 5
+python bench/run_benchmark.py --dataset dir --path mis_pruebas/   # <name>.wav + <name>.mid
+```
+
+Resultados sobre 4 piezas de **GuitarSet** (audio mic, guitarra ya aislada):
+
+| Transcriptor | F1 medio | Precisión | Recall |
+|---|---|---|---|
+| basic_pitch | **0.741** | 0.647 | 0.877 |
+| demucs+basic_pitch | 0.736 | 0.643 | 0.872 |
+
+**Hallazgos:**
+- Sobre guitarra **ya aislada**, Demucs no aporta (introduce artefactos) → la separación es
+  para mezclas completas, no para pistas limpias. Confirma hacerla opcional por job.
+- Baseline ~0.74 F1; el SOTA (High-Res/GAPS ~0.85–0.88) marca el margen a ganar integrando
+  YourMT3+/High-Res (Path A) y el CRNN de trimplexx (Path B) — el harness ya los acepta vía
+  el registro `TRANSCRIBERS`.
+- La **matriz de inhibición** (`sidecar/pipeline/inhibition.py`) es ahora la etapa 4b central:
+  el DP de digitación descarta posiciones imposibles y minimiza coste ergonómico.
+- Gestión de VRAM (`sidecar/pipeline/gpu.py`): `free_vram()` con `gc.collect()` +
+  `torch.cuda.empty_cache()` para la carga secuencial de modelos en 8 GB.
+
 ## Limitaciones de Fase 0 (conocidas)
 
 - La calidad de la transcripción depende de Basic Pitch; en mezcla completa conviene
@@ -64,5 +93,7 @@ storage/jobs/       # artefactos intermedios por ejecución (gitignored)
 
 ## Próximos pasos
 
-Fase 1: benchmark de calidad (High-Res / YourMT3+ vs Basic Pitch) y matriz de inhibición
-real. Fase 2+: empaquetado (Tauri + sidecar), UI y flujo human-in-the-loop con alphaTab.
+- **Fase 1 (cierre)**: integrar los modelos SOTA en el harness — YourMT3+ y High-Res (Path A)
+  y el CRNN de trimplexx (Path B) — para superar el baseline de Basic Pitch por F1 medido.
+- **Fase 2+**: empaquetado (Tauri + sidecar Python embebido), UI y flujo human-in-the-loop
+  con alphaTab; detección de técnicas expresivas.

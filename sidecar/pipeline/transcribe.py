@@ -30,21 +30,27 @@ def notes_from_midi_file(path: str) -> list[Note]:
     return notes_from_pretty_midi(pretty_midi.PrettyMIDI(path))
 
 
+def _basic_pitch_model():
+    """Prefiere el modelo ONNX (evita TensorFlow y el conflicto de protobuf)."""
+    from basic_pitch import ICASSP_2022_MODEL_PATH
+    onnx = ICASSP_2022_MODEL_PATH.parent / "nmp.onnx"
+    return str(onnx) if onnx.exists() else ICASSP_2022_MODEL_PATH
+
+
 def transcribe_audio(audio_path: str, onset_threshold: float = 0.5,
                      min_note_length_ms: float = 80.0) -> list[Note]:
-    """Transcribe un archivo de audio a notas usando Basic Pitch."""
+    """Transcribe un archivo de audio a notas usando Basic Pitch (backend ONNX)."""
     try:
         from basic_pitch.inference import predict
-        from basic_pitch import ICASSP_2022_MODEL_PATH
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
-            "Basic Pitch no esta instalado. Instala con: pip install basic-pitch\n"
+            "Basic Pitch no esta instalado. Instala con: pip install 'basic-pitch[onnx]'\n"
             "O usa --from-midi para saltar la etapa de transcripcion."
         ) from exc
 
     _, midi_data, _ = predict(
         audio_path,
-        ICASSP_2022_MODEL_PATH,
+        _basic_pitch_model(),
         onset_threshold=onset_threshold,
         minimum_note_length=min_note_length_ms,
         minimum_frequency=GUITAR_MIN_HZ,

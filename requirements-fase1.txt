@@ -1,0 +1,11 @@
+# Audio2Tab — dependencias Fase 1 (benchmark + separación)
+# Instalar DESPUÉS de requirements.txt
+#
+# PyTorch con CUDA (ajustar cuXXX al driver; cu124 probado en RTX 4070):
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+torch>=2.6           # instalar desde el índice CUDA de PyTorch
+torchaudio>=2.6      # idem
+
+demucs>=4.0          # separación de fuentes (etapa 2)
+mir_eval>=0.7        # métricas de transcripción (F1 a nivel de nota)
+mirdata>=1.0         # datasets de evaluación (GuitarSet)
