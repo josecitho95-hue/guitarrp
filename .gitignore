@@ -1,0 +1,19 @@
+# Entornos
+.venv/
+__pycache__/
+*.pyc
+
+# Artefactos de ejecucion
+storage/
+models/
+
+# Documentos generados (intermedios)
+docs/*.pdf
+docs/srs_pg*
+
+# Audio/salidas de prueba grandes
+*.wav
+!samples/.gitkeep
+
+# Node
+node_modules/

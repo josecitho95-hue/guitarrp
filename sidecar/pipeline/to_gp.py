@@ -1,0 +1,170 @@
+"""Etapa 5: Tablatura -> archivo Guitar Pro (.gp5/.gp4/.gp3).
+
+Cuantiza los tiempos de las notas a una rejilla de semicorcheas (mapa
+nota->compas/beat) y construye un objeto Song de PyGuitarPro. La cuantizacion
+es deliberadamente sencilla para Fase 0: cada onset se ajusta a la rejilla y se
+representa con una unica duracion estandar; los huecos se rellenan con silencios.
+"""
+from __future__ import annotations
+
+import math
+import os
+
+import guitarpro as gp
+from guitarpro import models as M
+
+from .types import TabNote
+
+# (slots de semicorchea, valor de duracion GP, con puntillo)
+# valor GP: 1=redonda 2=blanca 4=negra 8=corchea 16=semicorchea
+_DURATIONS = [
+    (16, 1, False),   # redonda
+    (12, 2, True),    # blanca con puntillo
+    (8, 2, False),    # blanca
+    (6, 4, True),     # negra con puntillo
+    (4, 4, False),    # negra
+    (3, 8, True),     # corchea con puntillo
+    (2, 8, False),    # corchea
+    (1, 16, False),   # semicorchea
+]
+SLOTS_PER_MEASURE = 16   # 4/4 con rejilla de semicorcheas
+
+_EXT_TO_VERSION = {
+    ".gp3": (3, 0, 0),
+    ".gp4": (4, 0, 0),
+    ".gp5": (5, 1, 0),
+}
+
+
+def _largest_fit(slots: int, cap: int) -> tuple[int, int, bool]:
+    """Mayor duracion representable que cabe en min(slots, cap)."""
+    limit = min(slots, cap)
+    for s, value, dotted in _DURATIONS:
+        if s <= limit:
+            return s, value, dotted
+    return 1, 16, False
+
+
+def _decompose(slots: int, cap: int) -> list[tuple[int, bool]]:
+    """Descompone una duracion (en slots) en una lista de (valor, puntillo)."""
+    out = []
+    remaining = slots
+    while remaining > 0:
+        s, value, dotted = _largest_fit(remaining, cap)
+        out.append((value, dotted))
+        remaining -= s
+    return out
+
+
+def _make_beat(voice, value: int, dotted: bool, notes: list[tuple[int, int, int]]):
+    """Crea un Beat. notes = lista de (cuerda, traste, velocidad); vacio = silencio."""
+    beat = M.Beat(voice)
+    beat.duration = M.Duration(value=value, isDotted=dotted)
+    if notes:
+        beat.status = M.BeatStatus.normal
+        for string, fret, vel in notes:
+            note = M.Note(beat)
+            note.value = fret
+            note.string = string
+            note.velocity = vel
+            note.type = M.NoteType.normal
+            beat.notes.append(note)
+    else:
+        beat.status = M.BeatStatus.rest
+    return beat
+
+
+def build_song(tab_notes: list[TabNote], bpm: float = 120.0, title: str = "Audio2Tab",
+               tuning: dict[int, int] | None = None) -> M.Song:
+    song = M.Song()
+    song.title = title
+    song.artist = "Audio2Tab"
+    song.tempo = int(round(bpm))
+    track = song.tracks[0]
+    track.name = "Guitar"
+
+    grid = (60.0 / bpm) / 4.0   # segundos por semicorchea
+
+    # Agrupar notas por slot de onset (acordes comparten slot).
+    events: dict[int, list[TabNote]] = {}
+    for tn in tab_notes:
+        slot = int(round(tn.start / grid))
+        events.setdefault(slot, []).append(tn)
+
+    sorted_slots = sorted(events)
+    if not sorted_slots:
+        sorted_slots = [0]
+        events[0] = []
+
+    # Duracion (en slots) de cada evento, sin solaparse con el siguiente.
+    ev_dur: dict[int, int] = {}
+    for idx, slot in enumerate(sorted_slots):
+        notes = events[slot]
+        if notes:
+            longest = max((tn.end - tn.start) for tn in notes)
+            dur = max(1, int(round(longest / grid)))
+        else:
+            dur = 1
+        if idx + 1 < len(sorted_slots):
+            dur = min(dur, sorted_slots[idx + 1] - slot)
+        ev_dur[slot] = max(1, dur)
+
+    last_slot = sorted_slots[-1]
+    total_slots = last_slot + ev_dur[last_slot]
+    n_measures = max(1, math.ceil(total_slots / SLOTS_PER_MEASURE))
+
+    # Plantilla de cabecera de compas (copia de la que trae Song por defecto).
+    template_ts = song.measureHeaders[0].timeSignature
+
+    song.measureHeaders = []
+    track.measures = []
+
+    slot_to_event = {s: events[s] for s in sorted_slots}
+
+    for mi in range(n_measures):
+        header = M.MeasureHeader()
+        header.number = mi + 1
+        header.timeSignature = template_ts
+        song.measureHeaders.append(header)
+
+        measure = M.Measure(track, header)
+        voice = measure.voices[0]
+        voice.beats = []
+
+        m_start = mi * SLOTS_PER_MEASURE
+        m_end = m_start + SLOTS_PER_MEASURE
+        t = m_start
+
+        while t < m_end:
+            if t in slot_to_event:
+                notes = slot_to_event[t]
+                cap = m_end - t
+                s, value, dotted = _largest_fit(ev_dur[t], cap)
+                payload = [(tn.string, tn.fret, tn.velocity) for tn in notes]
+                voice.beats.append(_make_beat(voice, value, dotted, payload))
+                t += s
+            else:
+                # silencio hasta el proximo evento o fin de compas
+                next_slots = [s for s in sorted_slots if m_start <= s < m_end and s > t]
+                gap_end = min(next_slots) if next_slots else m_end
+                gap = gap_end - t
+                for value, dotted in _decompose(gap, m_end - t):
+                    voice.beats.append(_make_beat(voice, value, dotted, []))
+                t = gap_end
+
+        if not voice.beats:   # compas vacio -> silencio de redonda
+            voice.beats.append(_make_beat(voice, 1, False, []))
+
+        track.measures.append(measure)
+
+    return song
+
+
+def write_gp(tab_notes: list[TabNote], out_path: str, bpm: float = 120.0,
+             title: str = "Audio2Tab") -> str:
+    ext = os.path.splitext(out_path)[1].lower()
+    if ext not in _EXT_TO_VERSION:
+        raise ValueError(f"Formato no soportado: {ext} (usa .gp5/.gp4/.gp3)")
+    song = build_song(tab_notes, bpm=bpm, title=title)
+    gp.write(song, out_path, version=_EXT_TO_VERSION[ext])
+    return out_path
