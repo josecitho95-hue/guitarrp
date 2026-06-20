@@ -1,87 +1,144 @@
-// Audio2Tab UI — habla con el sidecar FastAPI local.
+// Audio2Tab UI — asistente paso a paso (vanilla). Habla con el sidecar local.
 const API = window.AUDIO2TAB_API || "http://127.0.0.1:8765";
-
 const $ = (id) => document.getElementById(id);
-const fileInput = $("file");
-const drop = $("drop");
-const dropLabel = $("drop-label");
-const goBtn = $("go");
+
 let selectedFile = null;
 let pollTimer = null;
+const STAGE_ORDER = ["preprocess", "separating", "transcribing", "tabbing", "done"];
 
-// --- Estado del servidor ---
+// ---------- Navegación entre pasos ----------
+function goStep(n) {
+  document.querySelectorAll(".panel").forEach((p) => {
+    p.classList.toggle("is-current", +p.dataset.panel === n);
+  });
+  document.querySelectorAll(".stepper .step").forEach((s) => {
+    const i = +s.dataset.step;
+    s.classList.toggle("is-active", i === n);
+    s.classList.toggle("is-done", i < n);
+  });
+  document.querySelectorAll(".step-line").forEach((l, idx) => {
+    l.classList.toggle("is-done", idx < n - 1);
+  });
+}
+
+// ---------- Estado del sidecar ----------
 async function ping() {
+  const el = $("server");
   try {
     const r = await fetch(`${API}/healthz`, { cache: "no-store" });
-    setServer(r.ok);
+    const up = r.ok;
+    el.classList.toggle("is-on", up);
+    el.querySelector(".server-text").textContent = up ? "conectado" : "sin conexión";
   } catch {
-    setServer(false);
+    el.classList.remove("is-on");
+    el.querySelector(".server-text").textContent = "sin conexión";
   }
 }
-function setServer(up) {
-  const el = $("server-status");
-  el.classList.toggle("status--on", up);
-  el.classList.toggle("status--off", !up);
-  el.title = up ? "Sidecar conectado" : "Sidecar no disponible";
-}
 
-// --- Selección de archivo ---
-drop.addEventListener("click", () => fileInput.click());
-drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("drop--over"); });
-drop.addEventListener("dragleave", () => drop.classList.remove("drop--over"));
+// ---------- Paso 1: archivo ----------
+const drop = $("drop");
+drop.addEventListener("click", () => $("file").click());
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("is-over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("is-over"));
 drop.addEventListener("drop", (e) => {
-  e.preventDefault();
-  drop.classList.remove("drop--over");
+  e.preventDefault(); drop.classList.remove("is-over");
   if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
 });
-fileInput.addEventListener("change", () => {
-  if (fileInput.files.length) setFile(fileInput.files[0]);
+$("file").addEventListener("change", (e) => {
+  if (e.target.files.length) setFile(e.target.files[0]);
 });
 function setFile(f) {
   selectedFile = f;
-  dropLabel.textContent = f.name;
-  goBtn.disabled = false;
+  $("file-name").textContent = f.name;
+  $("file-pill").hidden = false;
+  $("drop-title").textContent = "Archivo seleccionado";
+  $("to-2").disabled = false;
 }
+$("file-clear").addEventListener("click", (e) => {
+  e.preventDefault();
+  selectedFile = null;
+  $("file").value = "";
+  $("file-pill").hidden = true;
+  $("drop-title").textContent = "Arrastra el archivo aquí";
+  $("to-2").disabled = true;
+});
 
-// --- Lanzar job ---
-goBtn.addEventListener("click", async () => {
-  if (!selectedFile) return;
-  goBtn.disabled = true;
+$("to-2").addEventListener("click", () => goStep(2));
+$("to-1").addEventListener("click", () => goStep(1));
+
+// ---------- Paso 2: controles segmentados ----------
+document.querySelectorAll(".segmented").forEach((seg) => {
+  seg.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    seg.querySelectorAll("button").forEach((b) => b.classList.remove("is-on"));
+    btn.classList.add("is-on");
+    seg.dataset.value = btn.dataset.val;
+  });
+});
+
+// ---------- Lanzar transcripción ----------
+$("go").addEventListener("click", async () => {
+  if (!selectedFile) { goStep(1); return; }
+  goStep(3);
+  startProcessingUI();
+
   const isMidi = /\.midi?$/i.test(selectedFile.name);
-
+  const separate = $("separate").checked;
   const fd = new FormData();
   fd.append("file", selectedFile);
-  fd.append("transcriber", $("transcriber").value);
+  fd.append("transcriber", $("transcriber").dataset.value);
   fd.append("output_format", $("output_format").value);
-  fd.append("open_string_pref", $("open_string_pref").value);
+  fd.append("open_string_pref", $("open_string_pref").dataset.value);
   fd.append("bpm", $("bpm").value);
-  fd.append("separate", $("separate").checked);
+  fd.append("separate", separate);
   fd.append("calibrate_tuning", $("calibrate_tuning").checked);
   fd.append("from_midi", isMidi);
 
-  resetJobCard(selectedFile.name);
   try {
     const r = await fetch(`${API}/jobs`, { method: "POST", body: fd });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const { id } = await r.json();
     poll(id);
   } catch (err) {
-    showError(`No se pudo crear el trabajo: ${err.message}`);
-    goBtn.disabled = false;
+    showError(`No se pudo iniciar: ${err.message}`);
   }
 });
 
-// --- Polling de progreso ---
+// ---------- Paso 3: proceso ----------
+function startProcessingUI() {
+  $("processing").hidden = false;
+  $("result").hidden = true;
+  $("failed").hidden = true;
+  $("proc-file").textContent = selectedFile ? selectedFile.name : "";
+  // Mostrar/ocultar "Aislando guitarra" según el toggle
+  const sepLi = document.querySelector('.stages li[data-stage="separating"]');
+  sepLi.classList.toggle("hidden", !$("separate").checked);
+  document.querySelectorAll(".stages li").forEach((li) => li.classList.remove("active", "done"));
+  $("progress-bar").style.width = "0%";
+}
+
+function paintStages(stage) {
+  const idx = STAGE_ORDER.indexOf(stage);
+  if (idx < 0) return;
+  document.querySelectorAll(".stages li").forEach((li) => {
+    const i = STAGE_ORDER.indexOf(li.dataset.stage);
+    li.classList.toggle("done", i < idx);
+    li.classList.toggle("active", i === idx);
+  });
+}
+
 function poll(id) {
   clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
     try {
-      const r = await fetch(`${API}/jobs/${id}`, { cache: "no-store" });
-      const j = await r.json();
-      setProgress(j.stage, j.progress);
+      const j = await (await fetch(`${API}/jobs/${id}`, { cache: "no-store" })).json();
+      if (j.stage) paintStages(j.stage);
+      $("progress-bar").style.width = `${Math.round((j.progress || 0) * 100)}%`;
       if (j.status === "done") {
         clearInterval(pollTimer);
-        showDone(id, j);
+        document.querySelectorAll(".stages li:not(.hidden)").forEach((li) => li.classList.add("done"));
+        showResult(id, j);
       } else if (j.status === "error") {
         clearInterval(pollTimer);
         showError(j.error || "Error desconocido");
@@ -93,33 +150,27 @@ function poll(id) {
   }, 700);
 }
 
-// --- UI del job ---
-function resetJobCard(name) {
-  $("job-card").hidden = false;
-  $("job-name").textContent = name;
-  $("job-result").hidden = true;
-  $("job-error").hidden = true;
-  setProgress("en cola", 0);
-}
-function setProgress(stage, pct) {
-  $("job-stage").textContent = stage || "";
-  $("progress-bar").style.width = `${Math.round((pct || 0) * 100)}%`;
-}
-function showDone(id, j) {
-  setProgress("listo", 1);
-  $("job-summary").textContent = `${j.n_notes ?? "?"} notas transcritas`;
-  const a = $("download");
-  a.href = `${API}/jobs/${id}/result`;
-  $("job-result").hidden = false;
-  goBtn.disabled = false;
-}
-function showError(msg) {
-  const e = $("job-error");
-  e.textContent = msg;
-  e.hidden = false;
-  goBtn.disabled = false;
+function showResult(id, j) {
+  $("processing").hidden = true;
+  $("result").hidden = false;
+  $("result-summary").textContent = `${j.n_notes ?? "?"} notas transcritas · ${$("output_format").value.toUpperCase()}`;
+  $("download").href = `${API}/jobs/${id}/result`;
 }
 
-// --- init ---
+function showError(msg) {
+  $("processing").hidden = true;
+  $("failed").hidden = false;
+  $("error-text").textContent = msg;
+}
+
+function reset() {
+  clearInterval(pollTimer);
+  goStep(1);
+}
+$("again").addEventListener("click", reset);
+$("retry").addEventListener("click", () => goStep(2));
+
+// ---------- init ----------
 ping();
 setInterval(ping, 4000);
+goStep(1);

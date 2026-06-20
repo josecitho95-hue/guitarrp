@@ -7,60 +7,159 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header>
-    <h1>Audio2Tab</h1>
-    <span id="server-status" class="status status--off" title="Estado del sidecar">●</span>
+  <div class="bg-glow"></div>
+
+  <header class="app-header">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 18V5l12-2v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="6" cy="18" r="3" fill="currentColor"/>
+        <circle cx="18" cy="16" r="3" fill="currentColor"/>
+      </svg>
+      <div>
+        <h1>Audio2Tab</h1>
+        <p class="tagline">Audio → tablatura de guitarra</p>
+      </div>
+    </div>
+    <div class="server" id="server">
+      <span class="server-dot"></span>
+      <span class="server-text">conectando…</span>
+    </div>
   </header>
 
-  <main>
-    <section class="card">
+  <!-- Stepper -->
+  <nav class="stepper" id="stepper" aria-label="Progreso">
+    <div class="step is-active" data-step="1">
+      <div class="step-bullet"><span class="num">1</span><svg class="ck" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <span class="step-label">Audio</span>
+    </div>
+    <div class="step-line"></div>
+    <div class="step" data-step="2">
+      <div class="step-bullet"><span class="num">2</span><svg class="ck" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <span class="step-label">Ajustes</span>
+    </div>
+    <div class="step-line"></div>
+    <div class="step" data-step="3">
+      <div class="step-bullet"><span class="num">3</span><svg class="ck" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <span class="step-label">Tablatura</span>
+    </div>
+  </nav>
+
+  <main class="stage">
+    <!-- PASO 1: Audio -->
+    <section class="panel is-current" data-panel="1">
+      <h2 class="panel-title">Elige tu audio</h2>
+      <p class="panel-sub">Sube una grabación de guitarra (MP3/WAV) o un MIDI.</p>
+
       <label class="drop" id="drop">
         <input type="file" id="file" accept=".mp3,.wav,.flac,.mid,.midi" hidden />
-        <span id="drop-label">Arrastra un audio (MP3/WAV) o MIDI, o haz clic para elegir</span>
+        <svg class="drop-icon" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="drop-title" id="drop-title">Arrastra el archivo aquí</span>
+        <span class="drop-hint">o haz clic para explorar</span>
       </label>
 
-      <div class="params">
-        <label>Modelo
-          <select id="transcriber">
-            <option value="mr_mt3">mr_mt3 (SOTA)</option>
-            <option value="basic_pitch">basic_pitch (ligero)</option>
-          </select>
-        </label>
-        <label>Formato
-          <select id="output_format">
-            <option value="gp5">GP5</option>
-            <option value="gp4">GP4</option>
-            <option value="gp3">GP3</option>
-          </select>
-        </label>
-        <label>Cuerdas al aire
-          <select id="open_string_pref">
-            <option value="media">Media</option>
-            <option value="alta">Alta</option>
-            <option value="baja">Baja</option>
-          </select>
-        </label>
-        <label>BPM
-          <input type="number" id="bpm" value="120" min="40" max="300" />
-        </label>
-        <label class="check"><input type="checkbox" id="separate" /> Separar guitarra (Demucs)</label>
-        <label class="check"><input type="checkbox" id="calibrate_tuning" /> Calibrar afinación (A440)</label>
+      <div class="file-pill" id="file-pill" hidden>
+        <svg viewBox="0 0 24 24" class="pill-icon"><path d="M9 18V5l12-2v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="18" cy="16" r="3" fill="currentColor"/></svg>
+        <span id="file-name"></span>
+        <button class="pill-x" id="file-clear" title="Quitar">✕</button>
       </div>
 
-      <button id="go" disabled>Transcribir</button>
+      <div class="nav">
+        <span></span>
+        <button class="btn btn-primary" id="to-2" disabled>Continuar →</button>
+      </div>
     </section>
 
-    <section class="card" id="job-card" hidden>
-      <div class="job-row">
-        <span id="job-name"></span>
-        <span id="job-stage" class="muted"></span>
+    <!-- PASO 2: Ajustes -->
+    <section class="panel" data-panel="2">
+      <h2 class="panel-title">Ajusta la transcripción</h2>
+      <p class="panel-sub">Valores por defecto recomendados; cámbialos si quieres.</p>
+
+      <div class="field">
+        <span class="field-label">Modelo de transcripción</span>
+        <div class="segmented" id="transcriber" data-value="mr_mt3">
+          <button data-val="mr_mt3" class="is-on">mr_mt3 · SOTA</button>
+          <button data-val="basic_pitch">basic_pitch · ligero</button>
+        </div>
       </div>
-      <div class="progress"><div id="progress-bar"></div></div>
-      <div id="job-result" hidden>
-        <p id="job-summary" class="muted"></p>
-        <a id="download" class="btn-download" download>Descargar tablatura</a>
+
+      <div class="field">
+        <span class="field-label">Preferencia por cuerdas al aire</span>
+        <div class="segmented" id="open_string_pref" data-value="media">
+          <button data-val="baja">Baja</button>
+          <button data-val="media" class="is-on">Media</button>
+          <button data-val="alta">Alta</button>
+        </div>
       </div>
-      <p id="job-error" class="error" hidden></p>
+
+      <div class="grid-2">
+        <div class="field">
+          <span class="field-label">Formato de salida</span>
+          <div class="select-wrap">
+            <select id="output_format">
+              <option value="gp5">Guitar Pro 5 (.gp5)</option>
+              <option value="gp4">Guitar Pro 4 (.gp4)</option>
+              <option value="gp3">Guitar Pro 3 (.gp3)</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <span class="field-label">Tempo (BPM)</span>
+          <input type="number" id="bpm" value="120" min="40" max="300" />
+        </div>
+      </div>
+
+      <label class="toggle">
+        <input type="checkbox" id="separate" />
+        <span class="track"><span class="thumb"></span></span>
+        <span class="toggle-text"><b>Aislar la guitarra</b><small>Usa Demucs si el audio tiene más instrumentos (mezcla completa).</small></span>
+      </label>
+
+      <label class="toggle">
+        <input type="checkbox" id="calibrate_tuning" />
+        <span class="track"><span class="thumb"></span></span>
+        <span class="toggle-text"><b>Calibrar afinación</b><small>Cuadra a A=440 Hz si la grabación está ligeramente desafinada.</small></span>
+      </label>
+
+      <div class="nav">
+        <button class="btn btn-ghost" id="to-1">← Atrás</button>
+        <button class="btn btn-primary" id="go">Transcribir ♪</button>
+      </div>
+    </section>
+
+    <!-- PASO 3: Proceso / Resultado -->
+    <section class="panel" data-panel="3">
+      <div id="processing">
+        <h2 class="panel-title">Transcribiendo…</h2>
+        <p class="panel-sub" id="proc-file"></p>
+
+        <ul class="stages" id="stages">
+          <li data-stage="preprocess"><span class="dot"></span>Preparando audio</li>
+          <li data-stage="separating"><span class="dot"></span>Aislando la guitarra</li>
+          <li data-stage="transcribing"><span class="dot"></span>Transcribiendo notas</li>
+          <li data-stage="tabbing"><span class="dot"></span>Calculando digitación</li>
+          <li data-stage="done"><span class="dot"></span>Generando Guitar Pro</li>
+        </ul>
+
+        <div class="progress"><div id="progress-bar"></div></div>
+      </div>
+
+      <div id="result" hidden>
+        <div class="success-badge">
+          <svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h2 class="panel-title center">¡Tablatura lista!</h2>
+        <p class="panel-sub center" id="result-summary"></p>
+        <a id="download" class="btn btn-success" download>⬇ Descargar tablatura</a>
+        <button class="btn btn-ghost full" id="again">Transcribir otra</button>
+      </div>
+
+      <div id="failed" hidden>
+        <div class="error-badge">!</div>
+        <h2 class="panel-title center">Algo salió mal</h2>
+        <p class="panel-sub center error-text" id="error-text"></p>
+        <button class="btn btn-ghost full" id="retry">Volver a intentar</button>
+      </div>
     </section>
   </main>
 
