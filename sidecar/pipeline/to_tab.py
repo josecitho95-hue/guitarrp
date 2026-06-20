@@ -115,7 +115,7 @@ def assign_tab(notes: list[Note], tuning: dict[int, int] | None = None,
             back[i][j] = best[1]
 
     if not best_cost[n - 1]:
-        return []
+        return _fallback_assign_tab(notes, tuning)
     last = min(best_cost[n - 1], key=best_cost[n - 1].get)
     path = [0] * n
     path[n - 1] = last
@@ -133,5 +133,32 @@ def assign_tab(notes: list[Note], tuning: dict[int, int] | None = None,
                 velocity=note.velocity, string=string, fret=fret,
                 pitch_bends=note.pitch_bends,
             ))
+    tab_notes.sort(key=lambda t: (t.start, -t.string))
+    return tab_notes
+
+
+def _fallback_assign_tab(notes: list[Note], tuning: dict[int, int]) -> list[TabNote]:
+    """Asignación de fallback extremadamente robusta si falla el algoritmo DP."""
+    tab_notes: list[TabNote] = []
+    events = _group_events(notes)
+    for ev in events:
+        assigned_strings = set()
+        for note in sorted(ev.notes, key=lambda n: -n.pitch):
+            candidates = _candidates(note.pitch, tuning)
+            best_cand = None
+            for string, fret in candidates:
+                if string not in assigned_strings:
+                    best_cand = (string, fret)
+                    break
+            if not best_cand and candidates:
+                best_cand = candidates[0]
+            if best_cand:
+                string, fret = best_cand
+                assigned_strings.add(string)
+                tab_notes.append(TabNote(
+                    pitch=note.pitch, start=note.start, end=note.end,
+                    velocity=note.velocity, string=string, fret=fret,
+                    pitch_bends=note.pitch_bends,
+                ))
     tab_notes.sort(key=lambda t: (t.start, -t.string))
     return tab_notes

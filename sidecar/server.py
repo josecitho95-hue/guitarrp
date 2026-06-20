@@ -23,6 +23,10 @@ from .schemas import JobCreated, JobStatus
 async def lifespan(app: FastAPI):
     config.ensure_dirs()
     db.init_db()
+    try:
+        db.clean_job_artifacts()
+    except Exception:
+        pass
     yield
     jobqueue.shutdown()
 

@@ -81,3 +81,36 @@ def list_jobs(limit: int = 100) -> list[dict]:
             (limit,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def clean_job_artifacts() -> None:
+    """Elimina los archivos WAV pesados de los trabajos completados o fallidos."""
+    import os
+    import shutil
+    from . import config
+
+    with _lock:
+        rows = _conn.execute(
+            "SELECT id, status FROM jobs WHERE status IN ('done', 'error')"
+        ).fetchall()
+
+    for r in rows:
+        job_id = r["id"]
+        jd = config.job_dir(job_id)
+        if not os.path.exists(jd):
+            continue
+
+        for item in os.listdir(jd):
+            item_path = os.path.join(jd, item)
+            # Conservar tab_notes.json, y el archivo GP final.
+            # Borrar input.wav, region_temp.wav y el directorio htdemucs.
+            if item.lower() in ("input.wav", "region_temp.wav"):
+                try:
+                    os.remove(item_path)
+                except Exception:
+                    pass
+            elif item.lower() == "htdemucs" and os.path.isdir(item_path):
+                try:
+                    shutil.rmtree(item_path)
+                except Exception:
+                    pass

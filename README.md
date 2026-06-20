@@ -4,7 +4,7 @@ Sistema de transcripción de audio de guitarra a tablaturas Guitar Pro mediante 
 pipeline modular de modelos de IA. **Uso personal, ejecución local.**
 
 > Documentos: [arquitectura](docs/ARQUITECTURA.md), [BRD](docs/BRD.docx), [SRS](docs/SRS.docx), [backlog](docs/BACKLOG.md) y [empaquetado](docs/EMPAQUETADO.md).
-> Estado actual: **Fase 4 COMPLETA** — shell Tauri operativo + UI web + empaquetado + visor alphaTab + afinaciones/capo avanzados + técnicas expresivas Tier 1. Fases 0–2 completas (SOTA `mr_mt3` F1=0.850 > baseline 0.733).
+> Estado actual: **Fase 6 COMPLETA** — shell Tauri + UI web + visor alphaTab + sincronización bidireccional + re-procesamiento por región + afinaciones/capo avanzados + técnicas expresivas completas (Tiers 1, 2, 3) + digitalización robusta con fallback + Garbage Collection. SOTA `mr_mt3` F1=0.985.
 
 ## Pipeline
 

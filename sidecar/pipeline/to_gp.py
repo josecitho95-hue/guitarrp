@@ -57,7 +57,7 @@ def _decompose(slots: int, cap: int) -> list[tuple[int, bool]]:
 
 
 def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote]):
-    """Crea un Beat con notas y sus respectivos efectos (Tier 1)."""
+    """Crea un Beat con notas y sus respectivos efectos (Tiers 1, 2 y 3)."""
     beat = M.Beat(voice)
     beat.duration = M.Duration(value=value, isDotted=dotted)
     if tab_notes:
@@ -86,7 +86,25 @@ def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote]):
                         M.BendPoint(position=12, value=int(round(tn.bend_value))),
                     ]
                 )
+
+            # Aplicar efectos (Tier 2)
+            if getattr(tn, "palm_mute", False):
+                note.effect.palmMute = True
+            if getattr(tn, "harmonic", None) == "natural":
+                note.effect.harmonic = M.NaturalHarmonic()
+
             beat.notes.append(note)
+
+        # Aplicar efectos de beat (Tier 3)
+        if any(getattr(tn, "tapping", False) for tn in tab_notes):
+            beat.effect.slapEffect = M.SlapEffect.tapping
+
+        # Sweep stroke (barrido de púa)
+        sweep_dir = next((getattr(tn, "sweep", None) for tn in tab_notes if getattr(tn, "sweep", None)), None)
+        if sweep_dir == "down":
+            beat.effect.stroke = M.BeatStroke(direction=M.BeatStrokeDirection.down, value=4)
+        elif sweep_dir == "up":
+            beat.effect.stroke = M.BeatStroke(direction=M.BeatStrokeDirection.up, value=4)
     else:
         beat.status = M.BeatStatus.rest
     return beat

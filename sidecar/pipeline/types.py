@@ -30,4 +30,8 @@ class TabNote(Note):
     vibrato: bool = False
     bend_type: str | None = None
     bend_value: int = 0
+    palm_mute: bool = False
+    harmonic: str | None = None
+    tapping: bool = False
+    sweep: str | None = None
 

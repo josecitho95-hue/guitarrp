@@ -153,7 +153,90 @@ def test_capo_and_tuning_export():
         assert track.strings[5].value == 38 # Drop D
 
 
+def test_techniques_fase6():
+    from sidecar.pipeline import techniques
+    # 1. Palm Mute: duración corta (< 0.15s), velocity >= 70, sin legato, slide, ni vibrato
+    n1 = TabNote(pitch=60, start=0.0, end=0.1, velocity=80, string=5, fret=3)
+    
+    # 2. Armónicos Naturales:
+    # Traste 12
+    n2 = TabNote(pitch=60, start=1.0, end=2.0, velocity=80, string=5, fret=12) # open_pitch = 60-12=48, fret=12
+    # Traste 7 digitado como 19
+    n3 = TabNote(pitch=67, start=2.5, end=3.5, velocity=80, string=5, fret=19) # open_pitch = 67-19=48, pitch=48+19=67, fret=19 -> fret=7
+    # Traste 5 digitado como 24
+    n4 = TabNote(pitch=72, start=4.0, end=5.0, velocity=80, string=5, fret=24) # open_pitch = 72-24=48, pitch=48+24=72, fret=24 -> fret=5
+
+    # 3. Tapping: ligado (hopo) con fret_diff >= 8 o fret >= 12 viniendo de fret 0
+    # Caso fret_diff >= 8
+    n5 = TabNote(pitch=60, start=5.5, end=6.0, velocity=80, string=5, fret=3)
+    n6 = TabNote(pitch=68, start=6.05, end=6.5, velocity=80, string=5, fret=11, hopo=True)
+    # Caso fret >= 12 viniendo de 0
+    n7 = TabNote(pitch=45, start=7.0, end=7.5, velocity=80, string=5, fret=0)
+    n8 = TabNote(pitch=57, start=7.55, end=8.0, velocity=80, string=5, fret=12, hopo=True)
+
+    # 4. Sweep Picking: consecutivas en cuerdas adyacentes con onset < 120ms
+    # Sweep down: 6 -> 5 -> 4 -> 3
+    n9 = TabNote(pitch=40, start=8.5, end=8.9, velocity=80, string=6, fret=0)
+    n10 = TabNote(pitch=45, start=8.6, end=9.0, velocity=80, string=5, fret=0)
+    n11 = TabNote(pitch=50, start=8.7, end=9.1, velocity=80, string=4, fret=0)
+    n12 = TabNote(pitch=55, start=8.8, end=9.2, velocity=80, string=3, fret=0)
+
+    # Correr detección
+    notes = [n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12]
+    tab = techniques.detect_techniques(notes)
+    
+    # Assert Palm Mute
+    assert tab[0].palm_mute is True
+    
+    # Assert Armónicos Naturales
+    # n2 (start 1.0) -> fret 12, harmonic "natural"
+    n2_det = next(n for n in tab if n.start == 1.0)
+    assert n2_det.harmonic == "natural"
+    assert n2_det.fret == 12
+    
+    # n3 (start 2.5) -> fret 7, harmonic "natural"
+    n3_det = next(n for n in tab if n.start == 2.5)
+    assert n3_det.harmonic == "natural"
+    assert n3_det.fret == 7
+    
+    # n4 (start 4.0) -> fret 5, harmonic "natural"
+    n4_det = next(n for n in tab if n.start == 4.0)
+    assert n4_det.harmonic == "natural"
+    assert n4_det.fret == 5
+
+    # Assert Tapping
+    n6_det = next(n for n in tab if n.start == 6.05)
+    assert n6_det.tapping is True
+    assert n6_det.hopo is False
+    
+    n8_det = next(n for n in tab if n.start == 7.55)
+    assert n8_det.tapping is True
+    assert n8_det.hopo is False
+
+    # Assert Sweep Picking down
+    n9_det = next(n for n in tab if n.start == 8.5)
+    n10_det = next(n for n in tab if n.start == 8.6)
+    n11_det = next(n for n in tab if n.start == 8.7)
+    n12_det = next(n for n in tab if n.start == 8.8)
+    assert n9_det.sweep == "down"
+    assert n10_det.sweep == "down"
+    assert n11_det.sweep == "down"
+    assert n12_det.sweep == "down"
+
+
+def test_fallback_assign_tab():
+    from sidecar.pipeline import to_tab
+    from sidecar.pipeline.types import Note
+    
+    notes = [Note(pitch=60, start=0.0, end=1.0)]
+    tab = to_tab._fallback_assign_tab(notes, to_tab.STANDARD_TUNING)
+    assert len(tab) == 1
+    assert tab[0].string == 2
+    assert tab[0].fret == 1  # 60 - 59 (B) = 1
+
+
 # --- Runner standalone (sin pytest) ---
+
 
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
