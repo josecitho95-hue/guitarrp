@@ -9,3 +9,9 @@ torchaudio>=2.6      # idem
 demucs>=4.0          # separación de fuentes (etapa 2)
 mir_eval>=0.7        # métricas de transcripción (F1 a nivel de nota)
 mirdata>=1.0         # datasets de evaluación (GuitarSet)
+
+# Transcriptor SOTA Path A (familia MT3). Requiere los shims de _mt3_compat.py
+# para correr sobre transformers 5.x. El modelo operativo es 'mr_mt3'.
+mt3-infer>=0.1.3
+pytorch_lightning>=2.0
+nnAudio>=0.3

@@ -4,7 +4,7 @@ Sistema de transcripción de audio de guitarra a tablaturas Guitar Pro mediante 
 pipeline modular de modelos de IA. **Uso personal, ejecución local.**
 
 > Documentos: plan de arquitectura, [BRD](docs/BRD.docx) y [SRS](docs/SRS.docx).
-> Estado actual: **Fase 1 — Benchmark de calidad** (infraestructura de medición + baseline + matriz de inhibición). Fase 0 (CLI spike) completa.
+> Estado actual: **Fase 1 COMPLETA** — benchmark + SOTA integrado (`mr_mt3` F1=0.850 > baseline 0.733) + matriz de inhibición + gestión de VRAM. Fase 0 (CLI spike) completa.
 
 ## Pipeline
 
@@ -14,8 +14,8 @@ preproceso → [separación Demucs] → audio→MIDI → MIDI→tab (digitación
                                                     física                 (.gp5/.gp4/.gp3)
 ```
 
-En Fase 0:
-- **Audio→MIDI**: Basic Pitch (se sustituye por High-Res/YourMT3+ en Fase 1).
+Transcriptores:
+- **Audio→MIDI**: `mr_mt3` (familia MT3, SOTA, por defecto) o `basic_pitch` (ligero, sin GPU).
 - **MIDI→Tab**: algoritmo de programación dinámica que minimiza el movimiento de mano
   con restricciones físicas (una cuerda por nota, span de acorde limitado, posiciones
   válidas) — hace de "matriz de inhibición" ligera.
@@ -65,20 +65,29 @@ python bench/run_benchmark.py --dataset guitarset --n 5
 python bench/run_benchmark.py --dataset dir --path mis_pruebas/   # <name>.wav + <name>.mid
 ```
 
-Resultados sobre 4 piezas de **GuitarSet** (audio mic, guitarra ya aislada):
+Resultados sobre **GuitarSet** (audio mic), F1 de onset a 50 ms:
 
 | Transcriptor | F1 medio | Precisión | Recall |
 |---|---|---|---|
-| basic_pitch | **0.741** | 0.647 | 0.877 |
+| **mr_mt3** (SOTA, familia MT3) | **0.850** | 0.851 | 0.849 |
+| basic_pitch (baseline) | 0.733 | 0.650 | 0.857 |
 | demucs+basic_pitch | 0.736 | 0.643 | 0.872 |
 
 **Hallazgos:**
+- **El SOTA gana por F1 medido**: `mr_mt3` (0.850) supera a Basic Pitch (0.733) en +0.117,
+  alcanzando el rango de la literatura (~0.85). Varias piezas llegan a 0.99–1.00.
+- Integrar la familia MT3 sobre el stack 2026 (torch 2.6, transformers 5.x) requirió:
+  - **`_mt3_compat.py`**: shims que restauran métodos de `ModuleUtilsMixin` que transformers
+    5.x removió (el T5 vendorizado de mt3-infer los usa).
+  - **Corrección de deriva temporal**: mt3-infer comprime el eje de tiempo ~1% (error de
+    frame-rate); sin corregir, los onsets tardíos se salen de la ventana y el F1 colapsa a
+    ~0.30. La constante `MT3_TIME_SCALE` (≈1.010) lo recupera.
+  - `yourmt3` (el más potente) queda bloqueado por incompatibilidades profundas de
+    transformers 5.x; `mt3_pytorch` falla al clonar por git-lfs en Windows. **`mr_mt3` es el
+    modelo MT3 operativo** en este stack.
 - Sobre guitarra **ya aislada**, Demucs no aporta (introduce artefactos) → la separación es
   para mezclas completas, no para pistas limpias. Confirma hacerla opcional por job.
-- Baseline ~0.74 F1; el SOTA (High-Res/GAPS ~0.85–0.88) marca el margen a ganar integrando
-  YourMT3+/High-Res (Path A) y el CRNN de trimplexx (Path B) — el harness ya los acepta vía
-  el registro `TRANSCRIBERS`.
-- La **matriz de inhibición** (`sidecar/pipeline/inhibition.py`) es ahora la etapa 4b central:
+- La **matriz de inhibición** (`sidecar/pipeline/inhibition.py`) es la etapa 4b central:
   el DP de digitación descarta posiciones imposibles y minimiza coste ergonómico.
 - Gestión de VRAM (`sidecar/pipeline/gpu.py`): `free_vram()` con `gc.collect()` +
   `torch.cuda.empty_cache()` para la carga secuencial de modelos en 8 GB.
@@ -93,7 +102,7 @@ Resultados sobre 4 piezas de **GuitarSet** (audio mic, guitarra ya aislada):
 
 ## Próximos pasos
 
-- **Fase 1 (cierre)**: integrar los modelos SOTA en el harness — YourMT3+ y High-Res (Path A)
-  y el CRNN de trimplexx (Path B) — para superar el baseline de Basic Pitch por F1 medido.
-- **Fase 2+**: empaquetado (Tauri + sidecar Python embebido), UI y flujo human-in-the-loop
+- **Fase 2**: empaquetado (Tauri + sidecar Python embebido), UI y flujo human-in-the-loop
   con alphaTab; detección de técnicas expresivas.
+- Mejoras opcionales de calidad: afinar `MT3_TIME_SCALE`, y reintentar `yourmt3` (el MT3 más
+  potente) con un transformers anclado, o `mt3_pytorch` evitando el git-lfs en Windows.

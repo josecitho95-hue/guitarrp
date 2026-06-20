@@ -52,10 +52,14 @@ def run(args: argparse.Namespace) -> int:
             log("separate", "omitida (usa --separate para aislar la guitarra)")
 
         # Etapa 3: audio -> MIDI
-        log("transcribe", "Transcribiendo audio a notas (Basic Pitch)...")
-        notes = transcribe.transcribe_audio(
-            wav, onset_threshold=args.onset_threshold,
-            min_note_length_ms=args.min_note_ms)
+        if args.transcriber == "mr_mt3":
+            log("transcribe", "Transcribiendo audio a notas (MT3 / mr_mt3, SOTA)...")
+            notes = transcribe.transcribe_mt3(wav, model="mr_mt3")
+        else:
+            log("transcribe", "Transcribiendo audio a notas (Basic Pitch)...")
+            notes = transcribe.transcribe_audio(
+                wav, onset_threshold=args.onset_threshold,
+                min_note_length_ms=args.min_note_ms)
 
     log("transcribe", f"{len(notes)} notas detectadas")
     if not notes:
@@ -82,6 +86,8 @@ def main() -> int:
     ap.add_argument("input", help="Audio (mp3/wav) o MIDI de entrada")
     ap.add_argument("-o", "--output", help="Salida .gp5/.gp4/.gp3 (def: <input>.gp5)")
     ap.add_argument("--from-midi", action="store_true", help="La entrada ya es un MIDI")
+    ap.add_argument("--transcriber", default="mr_mt3", choices=["mr_mt3", "basic_pitch"],
+                    help="Modelo audio->MIDI (def: mr_mt3, SOTA)")
     ap.add_argument("--separate", action="store_true", help="Aislar guitarra con Demucs")
     ap.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="Dispositivo Demucs")
     ap.add_argument("--bpm", type=float, default=120.0, help="Tempo para la cuantizacion")

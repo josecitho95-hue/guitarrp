@@ -36,12 +36,16 @@ def _demucs_basic_pitch(audio_path: str) -> list[Note]:
     return transcribe.transcribe_audio(stem)
 
 
+def _mr_mt3(audio_path: str) -> list[Note]:
+    return transcribe.transcribe_mt3(audio_path, model="mr_mt3")
+
+
 TRANSCRIBERS = {
     "basic_pitch": _basic_pitch,
+    "mr_mt3": _mr_mt3,                  # Path A SOTA (familia MT3, vía mt3-infer)
     "demucs+basic_pitch": _demucs_basic_pitch,
-    # "yourmt3": _yourmt3,        # se añade al integrar (Path A SOTA)
-    # "highres": _highres,        # se añade al integrar
-    # "trimplexx_crnn": _crnn,    # Path B directo audio->tab
+    # "yourmt3": incompatibilidad transformers 5.x (no operativo en stack 2026)
+    # "trimplexx_crnn": Path B directo audio->tab (pendiente)
 }
 
 

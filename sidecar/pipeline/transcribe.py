@@ -37,6 +37,70 @@ def _basic_pitch_model():
     return str(onnx) if onnx.exists() else ICASSP_2022_MODEL_PATH
 
 
+# --- YourMT3 (Path A SOTA) vía mt3-infer ---
+
+_MT3_MODELS = {}
+
+
+# Corrección de deriva temporal: mt3-infer 0.1.3 produce un MIDI con el eje de
+# tiempo comprimido ~1% (error sistemático de frame-rate). Sin corregir, los onsets
+# tardíos se salen de la ventana de 50 ms y el F1 colapsa. Constante empírica
+# derivada sobre GuitarSet (generaliza por ser propiedad del conversor, no del audio).
+MT3_TIME_SCALE = {"mr_mt3": 1.010}
+
+
+def transcribe_mt3(audio_path: str, model: str = "mr_mt3",
+                   guitar_only: bool = False, time_scale: float | None = None) -> list[Note]:
+    """Transcribe con la familia MT3 (mt3-infer). Auto-descarga checkpoint.
+
+    Path A SOTA. Requiere los shims de `_mt3_compat` para correr el T5 vendorizado
+    sobre transformers 5.x. `mr_mt3` es el que funciona de forma fiable en el stack
+    actual (yourmt3 tiene incompatibilidades profundas; mt3_pytorch falla al clonar
+    en Windows). `guitar_only=True` filtra a programas de guitarra (24-31).
+    `time_scale` corrige la deriva temporal del conversor (ver MT3_TIME_SCALE).
+    """
+    import os
+    import tempfile
+
+    import librosa
+
+    from . import _mt3_compat
+    from .gpu import get_device
+
+    _mt3_compat.apply()
+    if time_scale is None:
+        time_scale = MT3_TIME_SCALE.get(model, 1.0)
+
+    if model not in _MT3_MODELS:
+        from mt3_infer import load_model
+        _MT3_MODELS[model] = load_model(model, device=get_device())
+    mdl = _MT3_MODELS[model]
+
+    y, _ = librosa.load(audio_path, sr=16000, mono=True)
+    result = mdl.transcribe(y, sr=16000)
+
+    # La salida puede ser pretty_midi.PrettyMIDI o mido.MidiFile -> normalizar.
+    if hasattr(result, "instruments"):
+        pm = result
+    else:
+        tmp = os.path.join(tempfile.gettempdir(), "a2t_mt3_out.mid")
+        result.save(tmp)
+        import pretty_midi
+        pm = pretty_midi.PrettyMIDI(tmp)
+
+    out: list[Note] = []
+    for inst in pm.instruments:
+        if getattr(inst, "is_drum", False):
+            continue
+        if guitar_only and not (24 <= getattr(inst, "program", 0) <= 31):
+            continue
+        for n in inst.notes:
+            out.append(Note(pitch=int(n.pitch), start=float(n.start) * time_scale,
+                            end=float(n.end) * time_scale, velocity=int(n.velocity)))
+    out.sort(key=lambda n: (n.start, n.pitch))
+    return out
+
+
 def transcribe_audio(audio_path: str, onset_threshold: float = 0.5,
                      min_note_length_ms: float = 80.0) -> list[Note]:
     """Transcribe un archivo de audio a notas usando Basic Pitch (backend ONNX)."""
