@@ -62,7 +62,19 @@ def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote]):
     beat.duration = M.Duration(value=value, isDotted=dotted)
     if tab_notes:
         beat.status = M.BeatStatus.normal
-        for tn in tab_notes:
+        # RNF-01 / Robustez: si hay varias notas en la misma cuerda en este beat cuantizado,
+        # conservar únicamente la de mayor velocidad y menor tiempo de inicio para no corromper el archivo GP5.
+        seen_strings = set()
+        unique_notes = []
+        for tn in sorted(tab_notes, key=lambda x: (-x.velocity, x.start)):
+            if tn.string not in seen_strings:
+                seen_strings.add(tn.string)
+                unique_notes.append(tn)
+
+        # Ordenar por cuerda para consistencia
+        unique_notes.sort(key=lambda x: x.string)
+
+        for tn in unique_notes:
             note = M.Note(beat)
             note.value = tn.fret
             note.string = tn.string
@@ -71,7 +83,7 @@ def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote]):
 
             # Aplicar efectos (Tier 1)
             if tn.hopo:
-                note.effect.hammerPullOff = True
+                note.effect.hammer = True
             if tn.slide:
                 note.effect.slides = [M.SlideType.legatoSlideTo]
             if tn.vibrato:
@@ -96,11 +108,11 @@ def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote]):
             beat.notes.append(note)
 
         # Aplicar efectos de beat (Tier 3)
-        if any(getattr(tn, "tapping", False) for tn in tab_notes):
+        if any(getattr(tn, "tapping", False) for tn in unique_notes):
             beat.effect.slapEffect = M.SlapEffect.tapping
 
         # Sweep stroke (barrido de púa)
-        sweep_dir = next((getattr(tn, "sweep", None) for tn in tab_notes if getattr(tn, "sweep", None)), None)
+        sweep_dir = next((getattr(tn, "sweep", None) for tn in unique_notes if getattr(tn, "sweep", None)), None)
         if sweep_dir == "down":
             beat.effect.stroke = M.BeatStroke(direction=M.BeatStrokeDirection.down, value=4)
         elif sweep_dir == "up":
@@ -108,6 +120,7 @@ def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote]):
     else:
         beat.status = M.BeatStatus.rest
     return beat
+
 
 
 def build_song(tab_notes: list[TabNote], bpm: float = 120.0, title: str = "Audio2Tab",
