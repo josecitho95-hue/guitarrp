@@ -1,0 +1,30 @@
+{
+  "name": "guitar-pro",
+  "version": "1.0.0",
+  "description": "Sistema de transcripción de audio de guitarra a tablaturas Guitar Pro mediante un pipeline modular de modelos de IA. **Uso personal, ejecución local.**",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/josecitho95-hue/guitarrp.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/josecitho95-hue/guitarrp/issues"
+  },
+  "homepage": "https://github.com/josecitho95-hue/guitarrp#readme",
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.3"
+  }
+}

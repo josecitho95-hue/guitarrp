@@ -10,6 +10,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from . import config, db
@@ -27,6 +28,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Audio2Tab Sidecar", version="0.2.0", lifespan=lifespan)
+
+# El webview de Tauri usa origen tauri://localhost (o http://tauri.localhost en
+# Windows). Al ser un servicio estrictamente local, se permiten todos los orígenes.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/healthz")

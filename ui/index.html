@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audio2Tab</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Audio2Tab</h1>
+    <span id="server-status" class="status status--off" title="Estado del sidecar">●</span>
+  </header>
+
+  <main>
+    <section class="card">
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept=".mp3,.wav,.flac,.mid,.midi" hidden />
+        <span id="drop-label">Arrastra un audio (MP3/WAV) o MIDI, o haz clic para elegir</span>
+      </label>
+
+      <div class="params">
+        <label>Modelo
+          <select id="transcriber">
+            <option value="mr_mt3">mr_mt3 (SOTA)</option>
+            <option value="basic_pitch">basic_pitch (ligero)</option>
+          </select>
+        </label>
+        <label>Formato
+          <select id="output_format">
+            <option value="gp5">GP5</option>
+            <option value="gp4">GP4</option>
+            <option value="gp3">GP3</option>
+          </select>
+        </label>
+        <label>Cuerdas al aire
+          <select id="open_string_pref">
+            <option value="media">Media</option>
+            <option value="alta">Alta</option>
+            <option value="baja">Baja</option>
+          </select>
+        </label>
+        <label>BPM
+          <input type="number" id="bpm" value="120" min="40" max="300" />
+        </label>
+        <label class="check"><input type="checkbox" id="separate" /> Separar guitarra (Demucs)</label>
+        <label class="check"><input type="checkbox" id="calibrate_tuning" /> Calibrar afinación (A440)</label>
+      </div>
+
+      <button id="go" disabled>Transcribir</button>
+    </section>
+
+    <section class="card" id="job-card" hidden>
+      <div class="job-row">
+        <span id="job-name"></span>
+        <span id="job-stage" class="muted"></span>
+      </div>
+      <div class="progress"><div id="progress-bar"></div></div>
+      <div id="job-result" hidden>
+        <p id="job-summary" class="muted"></p>
+        <a id="download" class="btn-download" download>Descargar tablatura</a>
+      </div>
+      <p id="job-error" class="error" hidden></p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

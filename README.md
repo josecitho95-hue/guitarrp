@@ -4,9 +4,9 @@ Sistema de transcripción de audio de guitarra a tablaturas Guitar Pro mediante 
 pipeline modular de modelos de IA. **Uso personal, ejecución local.**
 
 > Documentos: [arquitectura](docs/ARQUITECTURA.md), [BRD](docs/BRD.docx), [SRS](docs/SRS.docx), [backlog](docs/BACKLOG.md) y [empaquetado](docs/EMPAQUETADO.md).
-> Estado actual: **Fase 2 COMPLETA** — sidecar FastAPI local (cola en proceso + SQLite, F1–F4)
-> con SH-01/SH-02, y validación de empaquetado ([PyInstaller torch+CUDA funciona](docs/EMPAQUETADO.md)).
-> Fases 0 y 1 completas (SOTA `mr_mt3` F1=0.850 > baseline 0.733).
+> Estado actual: **Fase 3 EN CURSO** — shell Tauri operativo (lanza/gestiona el sidecar,
+> verificado) + UI web (subir/progreso/descargar). Pendiente: empaquetado de producción
+> (venv embebido) e instalador. Fases 0–2 completas (SOTA `mr_mt3` F1=0.850 > baseline 0.733).
 
 ## Pipeline
 
@@ -45,6 +45,21 @@ python -m venv .venv
 
 Opciones: `--bpm`, `--onset-threshold`, `--min-note-ms`, `--work-dir`, formato por
 extensión de `-o` (`.gp5` por defecto, `.gp4`, `.gp3`).
+
+## App de escritorio (Tauri — Fase 3)
+
+Shell Tauri que lanza el sidecar al abrir (y lo termina al cerrar) y muestra la UI
+(`ui/`: subir audio, parámetros, progreso, descargar). Requiere Rust + Node.
+
+```bash
+npm install                 # instala el CLI de Tauri
+npm run dev                 # tauri dev: ventana de escritorio (lanza el sidecar)
+npm run build               # tauri build: ejecutable + instalador Windows
+```
+
+En dev, el shell lanza `\.venv\Scripts\python.exe -m sidecar`. Para producción, el
+sidecar se empaqueta como venv embebido (ver [empaquetado](docs/EMPAQUETADO.md));
+configurable con `AUDIO2TAB_PYTHON` y `AUDIO2TAB_CWD`.
 
 ## Sidecar (API local — Fase 2)
 

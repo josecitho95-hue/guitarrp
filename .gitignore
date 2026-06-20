@@ -28,3 +28,7 @@ logs/
 build_pkg/
 dist_pkg/
 *.spec
+
+# Tauri build
+src-tauri/target/
+src-tauri/gen/
