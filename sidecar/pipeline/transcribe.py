@@ -58,7 +58,8 @@ MT3_TIME_SCALE = {"mr_mt3": 1.010}
 
 
 def transcribe_mt3(audio_path: str, model: str = "mr_mt3",
-                   guitar_only: bool = False, time_scale: float | None = None) -> list[Note]:
+                   guitar_only: bool = False, time_scale: float | None = None,
+                   device: str | None = None) -> list[Note]:
     """Transcribe con la familia MT3 (mt3-infer). Auto-descarga checkpoint.
 
     Path A SOTA. Requiere los shims de `_mt3_compat` para correr el T5 vendorizado
@@ -79,10 +80,14 @@ def transcribe_mt3(audio_path: str, model: str = "mr_mt3",
     if time_scale is None:
         time_scale = MT3_TIME_SCALE.get(model, 1.0)
 
+    if device is None:
+        device = get_device()
+
     if model not in _MT3_MODELS:
         from mt3_infer import load_model
-        _MT3_MODELS[model] = load_model(model, device=get_device())
+        _MT3_MODELS[model] = load_model(model, device=device)
     mdl = _MT3_MODELS[model]
+
 
     y, _ = librosa.load(audio_path, sr=16000, mono=True)
     result = mdl.transcribe(y, sr=16000)

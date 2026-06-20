@@ -85,7 +85,8 @@ def reprocess_region(
         try:
             # Transcribir el fragmento cortado
             if params.transcriber == "mr_mt3":
-                notes = transcribe.transcribe_mt3(region_wav_path, model="mr_mt3")
+                notes = transcribe.transcribe_mt3(region_wav_path, model="mr_mt3", device=params.device)
+
             else:
                 notes = transcribe.transcribe_audio(
                     region_wav_path,

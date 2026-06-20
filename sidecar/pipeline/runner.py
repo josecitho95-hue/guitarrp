@@ -64,7 +64,8 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
 
         prog("transcribing", 0.4)
         if params.transcriber == "mr_mt3":
-            notes = transcribe.transcribe_mt3(wav, model="mr_mt3")
+            notes = transcribe.transcribe_mt3(wav, model="mr_mt3", device=params.device)
+
         else:
             notes = transcribe.transcribe_audio(
                 wav, onset_threshold=params.onset_threshold,
