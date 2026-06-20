@@ -109,3 +109,62 @@ def job_result(job_id: str):
         raise HTTPException(status_code=410, detail="artefacto no disponible")
     return FileResponse(out, filename=os.path.basename(out),
                         media_type="application/octet-stream")
+
+
+@app.get("/jobs/{job_id}/audio")
+def job_audio(job_id: str):
+    j = db.get_job(job_id)
+    if not j:
+        raise HTTPException(status_code=404, detail="job no encontrado")
+    in_path = j.get("input_path")
+    if not in_path or not os.path.exists(in_path):
+        raise HTTPException(status_code=404, detail="audio original no encontrado")
+    ext = os.path.splitext(in_path)[1].lower()
+    media_type = "audio/mpeg" if ext == ".mp3" else "audio/wav"
+    return FileResponse(in_path, filename=os.path.basename(in_path), media_type=media_type)
+
+
+@app.post("/jobs/{job_id}/reprocess")
+def job_reprocess(
+    job_id: str,
+    start_measure: int = Form(...),
+    end_measure: int = Form(...),
+    transcriber: str | None = Form(None),
+    open_string_pref: str | None = Form(None),
+    onset_threshold: float | None = Form(None),
+    min_note_ms: float | None = Form(None),
+):
+    j = db.get_job(job_id)
+    if not j:
+        raise HTTPException(status_code=404, detail="job no encontrado")
+    if j["status"] != "done":
+        raise HTTPException(status_code=400, detail="el job debe estar en estado 'done' para re-procesar")
+
+    original_params = j.get("params") or {}
+    overrides = {}
+    if transcriber is not None:
+        overrides["transcriber"] = transcriber
+    if open_string_pref is not None:
+        overrides["open_string_pref"] = open_string_pref
+    if onset_threshold is not None:
+        overrides["onset_threshold"] = onset_threshold
+    if min_note_ms is not None:
+        overrides["min_note_ms"] = min_note_ms
+
+    from .pipeline import reprocess
+    try:
+        res = reprocess.reprocess_region(
+            work_dir=config.job_dir(job_id),
+            original_input_path=j["input_path"],
+            bpm=j["bpm"] or 120.0,
+            original_params=original_params,
+            start_measure=start_measure,
+            end_measure=end_measure,
+            overrides=overrides,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    db.update_job(job_id, n_notes=res["n_notes"], output_path=res["output"])
+    return res
+

@@ -165,6 +165,8 @@
       </div>
 
       <div id="result" hidden>
+        <!-- Audio original oculto para sincronización -->
+        <audio id="original-audio" style="display: none;"></audio>
         <div class="success-badge">
           <svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
@@ -186,6 +188,12 @@
               <svg viewBox="0 0 24 24" class="ctrl-icon"><path d="M6 6h12v12H6z" fill="currentColor"/></svg>
               <span>Detener</span>
             </button>
+            <div class="select-wrap" style="width: auto; margin-left: auto; font-size: 13px;">
+              <select id="audio-mode-select">
+                <option value="synth">Sintetizador (MIDI)</option>
+                <option value="original">Audio Original (Real)</option>
+              </select>
+            </div>
           </div>
 
           <div class="at-viewport">
@@ -216,12 +224,12 @@
           <div class="range-buttons">
             <button id="btn-highlight" class="btn btn-ctrl btn-ghost">Seleccionar rango</button>
             <button id="btn-clear-highlight" class="btn btn-ctrl btn-ghost" style="display: none;">Limpiar selección</button>
-            <button id="btn-reprocess-visual" class="btn btn-primary" title="Reprocesar Región (Disponible en Fase 5)" disabled>
+            <button id="btn-reprocess" class="btn btn-primary">
               Reprocesar Región
             </button>
           </div>
           <p id="range-msg" class="panel-sub" style="font-size: 11px; margin-top: 4px; text-align: center; color: var(--muted);">
-            Puedes loop-reproducir o seleccionar el rango. (El reprocesado real requiere la Fase 5).
+            Puedes loop-reproducir, seleccionar el rango o re-transcribir esta sección con nuevos parámetros.
           </p>
         </div>
 

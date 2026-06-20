@@ -87,5 +87,26 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
     out_path = os.path.splitext(out_path)[0] + "." + params.output_format.lstrip(".")
     to_gp.write_gp(tab, out_path, bpm=bpm, title=title, tuning=tuning_dict, capo=params.capo)
 
+    # Guardar tab_notes en un archivo JSON intermedio para re-procesado posterior
+    import json
+    notes_data = [
+        {
+            "pitch": n.pitch,
+            "start": n.start,
+            "end": n.end,
+            "velocity": n.velocity,
+            "string": n.string,
+            "fret": n.fret,
+            "hopo": n.hopo,
+            "slide": n.slide,
+            "vibrato": n.vibrato,
+            "bend_type": n.bend_type,
+            "bend_value": n.bend_value,
+        }
+        for n in tab
+    ]
+    with open(os.path.join(work_dir, "tab_notes.json"), "w", encoding="utf-8") as f:
+        json.dump(notes_data, f, indent=2)
+
     prog("done", 1.0)
     return {"output": out_path, "n_notes": len(notes), "n_tab": len(tab), "bpm": round(bpm, 1)}

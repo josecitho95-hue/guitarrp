@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id);
 
 let selectedFile = null;
 let pollTimer = null;
+let currentJobId = null;
 const STAGE_ORDER = ["preprocess", "separating", "transcribing", "tabbing", "done"];
 
 // ---------- Navegación entre pasos ----------
@@ -179,6 +180,23 @@ function initAlphaTab(fileUrl) {
   const playBtn = $("play-btn");
   const pauseBtn = $("pause-btn");
   const stopBtn = $("stop-btn");
+  const audio = $("original-audio");
+  const modeSelect = $("audio-mode-select");
+
+  // Forzar volumen según modo inicial
+  atApi.scoreLoaded.on((score) => {
+    const mode = modeSelect.value;
+    atApi.masterVolume = mode === "original" ? 0.0 : 1.0;
+
+    const track = score.tracks[0];
+    if (track && track.staves[0] && track.staves[0].bars) {
+      const totalBars = track.staves[0].bars.length;
+      $("range-start").max = totalBars;
+      $("range-end").max = totalBars;
+      $("range-start").value = 1;
+      $("range-end").value = Math.min(4, totalBars);
+    }
+  });
 
   atApi.playPauseChanged.on((e) => {
     if (e.state === 1) { // 1 = Playing
@@ -190,28 +208,80 @@ function initAlphaTab(fileUrl) {
     }
   });
 
-    playBtn.onclick = () => atApi.play();
-    pauseBtn.onclick = () => atApi.pause();
-    stopBtn.onclick = () => atApi.stop();
+  playBtn.onclick = () => {
+    const mode = modeSelect.value;
+    if (mode === "original") {
+      atApi.masterVolume = 0.0;
+      atApi.play();
+      audio.play();
+    } else {
+      atApi.masterVolume = 1.0;
+      atApi.play();
+      audio.pause();
+    }
+  };
 
-    atApi.scoreLoaded.on((score) => {
-      const track = score.tracks[0];
-      if (track && track.staves[0] && track.staves[0].bars) {
-        const totalBars = track.staves[0].bars.length;
-        $("range-start").max = totalBars;
-        $("range-end").max = totalBars;
-        $("range-start").value = 1;
-        $("range-end").value = Math.min(4, totalBars);
+  pauseBtn.onclick = () => {
+    atApi.pause();
+    audio.pause();
+  };
+
+  stopBtn.onclick = () => {
+    atApi.stop();
+    audio.pause();
+    audio.currentTime = 0;
+  };
+
+  // Sincronización de audio original -> alphaTab
+  audio.ontimeupdate = () => {
+    if (modeSelect.value !== "original" || !atApi || !atApi.isReadyForPlayback) return;
+    const diff = Math.abs(atApi.timePosition - (audio.currentTime * 1000));
+    if (diff > 150) {
+      atApi.timePosition = audio.currentTime * 1000;
+    }
+  };
+
+  audio.onended = () => {
+    atApi.stop();
+  };
+
+  // Sincronización de alphaTab -> audio original
+  atApi.playerPositionChanged.on((args) => {
+    if (modeSelect.value !== "original") return;
+    const diff = Math.abs(args.currentTime - (audio.currentTime * 1000));
+    if (diff > 300) {
+      audio.currentTime = args.currentTime / 1000;
+    }
+  });
+
+  // Manejador del cambio de fuente de audio
+  modeSelect.onchange = (e) => {
+    const mode = e.target.value;
+    if (mode === "original") {
+      atApi.masterVolume = 0.0;
+      audio.currentTime = atApi.timePosition / 1000;
+      if (playBtn.style.display === "none") { // playing
+        audio.play();
       }
-    });
-  }
+    } else {
+      atApi.masterVolume = 1.0;
+      audio.pause();
+    }
+  };
+}
 
 function showResult(id, j) {
+  currentJobId = id;
   $("processing").hidden = true;
   $("result").hidden = false;
   const bpmTxt = j.bpm ? ` · ${Math.round(j.bpm)} BPM` : "";
   $("result-summary").textContent = `${j.n_notes ?? "?"} notas transcritas${bpmTxt} · ${$("output_format").value.toUpperCase()}`;
   $("download").href = `${API}/jobs/${id}/result`;
+
+  // Cargar audio original
+  const audio = $("original-audio");
+  audio.src = `${API}/jobs/${id}/audio`;
+  audio.load();
 
   // Ensanchar la interfaz para la partitura
   document.querySelector(".stage").classList.add("is-wide");
@@ -230,6 +300,16 @@ function showError(msg) {
 
 function reset() {
   clearInterval(pollTimer);
+
+  // Restaurar el audio original
+  const audio = $("original-audio");
+  audio.pause();
+  audio.src = "";
+  currentJobId = null;
+
+  // Restaurar el texto del mensaje de rango
+  $("range-msg").textContent = "Puedes loop-reproducir, seleccionar el rango o re-transcribir esta sección con nuevos parámetros.";
+  $("range-msg").style.color = "var(--muted)";
 
   // Restaurar el ancho normal de la interfaz
   document.querySelector(".stage").classList.remove("is-wide");
@@ -299,4 +379,59 @@ $("btn-clear-highlight").addEventListener("click", () => {
   } catch(e) {}
   $("btn-clear-highlight").style.display = "none";
 });
+
+// ---------- Reprocesamiento por Región (Fase 5) ----------
+$("btn-reprocess").addEventListener("click", async () => {
+  if (!currentJobId || !atApi) return;
+  const start = parseInt($("range-start").value) || 1;
+  const end = parseInt($("range-end").value) || 1;
+
+  const track = atApi.score.tracks[0];
+  if (!track || !track.staves[0]) return;
+  const totalBars = track.staves[0].bars.length;
+
+  if (start < 1 || end < 1 || start > totalBars || end > totalBars || start > end) {
+    alert("Rango de compases inválido.");
+    return;
+  }
+
+  const btn = $("btn-reprocess");
+  const msg = $("range-msg");
+  btn.disabled = true;
+  msg.textContent = "Re-procesando región de compases seleccionada...";
+  msg.style.color = "var(--accent)";
+
+  const fd = new FormData();
+  fd.append("start_measure", start);
+  fd.append("end_measure", end);
+  fd.append("transcriber", $("transcriber").dataset.value);
+  fd.append("open_string_pref", $("open_string_pref").dataset.value);
+
+  try {
+    const r = await fetch(`${API}/jobs/${currentJobId}/reprocess`, {
+      method: "POST",
+      body: fd
+    });
+    if (!r.ok) {
+      throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+    }
+    const res = await r.json();
+    msg.textContent = `Región re-procesada con éxito. ${res.n_reprocessed} notas actualizadas en el rango.`;
+    msg.style.color = "var(--ok)";
+
+    // Detener audio
+    const audio = $("original-audio");
+    audio.pause();
+    audio.currentTime = 0;
+
+    // Recargar alphaTab sin caché
+    initAlphaTab(`${API}/jobs/${currentJobId}/result?t=${Date.now()}`);
+  } catch (e) {
+    msg.textContent = `Error al re-procesar: ${e.message}`;
+    msg.style.color = "var(--err)";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 

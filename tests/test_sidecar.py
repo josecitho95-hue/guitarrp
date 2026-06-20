@@ -77,6 +77,25 @@ def test_job_lifecycle_from_midi():
 
         assert status_2["status"] == "done", status_2
 
+        # 3. Test de re-procesamiento por región
+        r = client.post(
+            f"/jobs/{job_id_2}/reprocess",
+            data={
+                "start_measure": "1",
+                "end_measure": "2",
+                "open_string_pref": "alta"
+            }
+        )
+        assert r.status_code == 200, r.text
+        res_data = r.json()
+        assert "n_notes" in res_data
+        assert res_data["n_reprocessed"] > 0
+
+        # 4. Test de descarga del audio original
+        r = client.get(f"/jobs/{job_id_2}/audio")
+        assert r.status_code == 200
+        assert len(r.content) > 100
+
 
 if __name__ == "__main__":
     test_job_lifecycle_from_midi()
