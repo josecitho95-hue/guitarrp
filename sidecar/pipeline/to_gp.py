@@ -123,81 +123,79 @@ def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote]):
 
 
 
-def build_song(tab_notes: list[TabNote], bpm: float = 120.0, title: str = "Audio2Tab",
-               tuning: dict[int, int] | None = None, capo: int = 0) -> M.Song:
-    song = M.Song()
-    song.title = title
-    song.artist = "Audio2Tab"
-    song.tempo = int(round(bpm))
-    track = song.tracks[0]
-    track.name = "Guitar"
-    track.offset = capo
-    if tuning:
-        for string_idx, midi in tuning.items():
-            if 0 <= string_idx - 1 < len(track.strings):
-                track.strings[string_idx - 1].value = midi
+_DEFAULT_GUITAR_TUNING = {1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 40}
 
-    grid = (60.0 / bpm) / 4.0   # segundos por semicorchea
 
-    # Agrupar notas por slot de onset (acordes comparten slot).
+_SUBDIV = 4   # subdivisiones por beat (negra) -> rejilla de semicorcheas
+
+
+def _make_to_slot(beats, bpm: float):
+    """Devuelve una función onset_segundos -> slot (entero).
+
+    Con `beats` (tiempos de beat reales del audio) cuantiza RELATIVO a los beats:
+    corrige el desfase de fase (el grid fijo asume rejilla desde t=0) y sigue el
+    pulso real. Sin beats, usa el grid fijo clásico a `bpm`.
+    """
+    if beats is not None and len(beats) >= 2:
+        import numpy as np
+        idx = np.arange(len(beats), dtype=float)
+        beats = np.asarray(beats, dtype=float)
+
+        def to_slot(t: float) -> int:
+            bp = float(np.interp(t, beats, idx))   # posición en beats (clamp a extremos)
+            return int(round(bp * _SUBDIV))
+        return to_slot
+
+    grid = (60.0 / bpm) / 4.0
+    return lambda t: int(round(t / grid))
+
+
+def _track_layout(tab_notes: list[TabNote], to_slot):
+    """Agrupa las notas de una pista por slot de onset y calcula su duración en
+    slots. Devuelve (events, ev_dur, sorted_slots)."""
     events: dict[int, list[TabNote]] = {}
     for tn in tab_notes:
-        slot = int(round(tn.start / grid))
+        slot = to_slot(tn.start)
         events.setdefault(slot, []).append(tn)
 
     sorted_slots = sorted(events)
-    if not sorted_slots:
-        sorted_slots = [0]
-        events[0] = []
-
-    # Duracion (en slots) de cada evento, sin solaparse con el siguiente.
     ev_dur: dict[int, int] = {}
     for idx, slot in enumerate(sorted_slots):
         notes = events[slot]
-        if notes:
-            longest = max((tn.end - tn.start) for tn in notes)
-            dur = max(1, int(round(longest / grid)))
-        else:
-            dur = 1
+        end_slot = max((to_slot(tn.end) for tn in notes), default=slot + 1) if notes else slot + 1
+        dur = max(1, end_slot - slot)
         if idx + 1 < len(sorted_slots):
             dur = min(dur, sorted_slots[idx + 1] - slot)
         ev_dur[slot] = max(1, dur)
+    return events, ev_dur, sorted_slots
 
-    last_slot = sorted_slots[-1]
-    total_slots = last_slot + ev_dur[last_slot]
-    n_measures = max(1, math.ceil(total_slots / SLOTS_PER_MEASURE))
 
-    # Plantilla de cabecera de compas (copia de la que trae Song por defecto).
-    template_ts = song.measureHeaders[0].timeSignature
+def _total_slots(ev_dur, sorted_slots) -> int:
+    if not sorted_slots:
+        return 0
+    last = sorted_slots[-1]
+    return last + ev_dur[last]
 
-    song.measureHeaders = []
+
+def _fill_track_measures(track, headers, events, ev_dur, sorted_slots, n_measures):
+    """Rellena track.measures con beats/silencios cuantizados, hasta n_measures."""
     track.measures = []
-
-    slot_to_event = {s: events[s] for s in sorted_slots}
-
     for mi in range(n_measures):
-        header = M.MeasureHeader()
-        header.number = mi + 1
-        header.timeSignature = template_ts
-        song.measureHeaders.append(header)
-
-        measure = M.Measure(track, header)
+        measure = M.Measure(track, headers[mi])
         voice = measure.voices[0]
         voice.beats = []
 
         m_start = mi * SLOTS_PER_MEASURE
         m_end = m_start + SLOTS_PER_MEASURE
         t = m_start
-
         while t < m_end:
-            if t in slot_to_event:
-                notes = slot_to_event[t]
+            if t in events:
+                notes = events[t]
                 cap = m_end - t
                 s, value, dotted = _largest_fit(ev_dur[t], cap)
                 voice.beats.append(_make_beat(voice, value, dotted, notes))
                 t += s
             else:
-                # silencio hasta el proximo evento o fin de compas
                 next_slots = [s for s in sorted_slots if m_start <= s < m_end and s > t]
                 gap_end = min(next_slots) if next_slots else m_end
                 gap = gap_end - t
@@ -207,10 +205,110 @@ def build_song(tab_notes: list[TabNote], bpm: float = 120.0, title: str = "Audio
 
         if not voice.beats:   # compas vacio -> silencio de redonda
             voice.beats.append(_make_beat(voice, 1, False, []))
-
         track.measures.append(measure)
 
+
+def _write_tempo_map(song: M.Song, beats, base_bpm: float) -> None:
+    """Escribe cambios de tempo por compás según el espaciado real de los beats,
+    para que la reconstrucción a segundos siga el pulso del audio (incluye
+    secciones más lentas/rápidas). Solo escribe cuando el tempo cambia >4%."""
+    if beats is None or len(beats) < 2 or not song.tracks:
+        return
+    import numpy as np
+    beats = np.asarray(beats, dtype=float)
+    bpm = 60.0 / float(np.median(np.diff(beats)))
+    song.tempo = int(round(max(30, min(300, bpm))))
+
+    track = song.tracks[0]
+    prev = song.tempo
+    for mi, measure in enumerate(track.measures):
+        b0, b1 = mi * 4, mi * 4 + 4
+        if b1 >= len(beats):
+            break
+        seg = beats[b0:b1 + 1]
+        if len(seg) < 2:
+            continue
+        local = 60.0 / float(np.median(np.diff(seg)))
+        local = max(30, min(300, local))
+        if abs(local - prev) / prev > 0.04:
+            beats_in_m = measure.voices[0].beats if measure.voices else []
+            if beats_in_m:
+                mtc = M.MixTableChange()
+                item = M.MixTableItem()
+                item.value = int(round(local))
+                item.allTracks = True
+                mtc.tempo = item
+                beats_in_m[0].effect.mixTableChange = mtc
+            prev = local
+
+
+def build_multitrack_song(instruments: list[dict], bpm: float = 120.0,
+                          title: str = "Audio2Tab", beats=None) -> M.Song:
+    """Construye un Song con una pista por instrumento.
+
+    `instruments`: lista de dicts {name, tuning, tab_notes, capo?, midi_program?}.
+    Todas las pistas comparten las mismas cabeceras de compas; las más cortas se
+    rellenan con silencios hasta el número de compases de la más larga.
+    `beats`: tiempos de beat reales del audio (opcional) para cuantización
+    relativa a beats + mapa de tempo dinámico.
+    """
+    song = M.Song()
+    song.title = title
+    song.artist = "Audio2Tab"
+    song.tempo = int(round(bpm))
+    template_ts = song.measureHeaders[0].timeSignature
+    to_slot = _make_to_slot(beats, bpm)
+
+    layouts = []
+    max_total = 0
+    for inst in instruments:
+        ev, evd, ss = _track_layout(inst["tab_notes"], to_slot)
+        layouts.append((ev, evd, ss))
+        max_total = max(max_total, _total_slots(evd, ss))
+    n_measures = max(1, math.ceil(max_total / SLOTS_PER_MEASURE)) if max_total else 1
+
+    song.measureHeaders = []
+    for mi in range(n_measures):
+        header = M.MeasureHeader()
+        header.number = mi + 1
+        header.timeSignature = template_ts
+        song.measureHeaders.append(header)
+
+    song.tracks = []
+    for idx, (inst, (ev, evd, ss)) in enumerate(zip(instruments, layouts)):
+        track = M.Track(song, idx + 1)
+        track.name = inst.get("name", f"Track {idx + 1}")
+        track.offset = inst.get("capo", 0)
+        if inst.get("percussion"):
+            # Pista de batería: canal MIDI 10 (idx 9), 6 cuerdas placeholder.
+            # En estas notas `value` (=fret de la TabNote) es el nº MIDI de percusión.
+            track.isPercussionTrack = True
+            track.channel.channel = 9
+            track.channel.effectChannel = 9
+            track.strings = [M.GuitarString(i + 1, 0) for i in range(6)]
+        else:
+            tuning = inst.get("tuning") or _DEFAULT_GUITAR_TUNING
+            track.strings = [M.GuitarString(i + 1, tuning[s])
+                             for i, s in enumerate(sorted(tuning))]
+            if inst.get("midi_program") is not None:
+                try:
+                    track.channel.instrument = int(inst["midi_program"])
+                except Exception:
+                    pass
+        _fill_track_measures(track, song.measureHeaders, ev, evd, ss, n_measures)
+        song.tracks.append(track)
+
+    _write_tempo_map(song, beats, bpm)
     return song
+
+
+def build_song(tab_notes: list[TabNote], bpm: float = 120.0, title: str = "Audio2Tab",
+               tuning: dict[int, int] | None = None, capo: int = 0) -> M.Song:
+    """Compatibilidad single-track: delega en build_multitrack_song."""
+    return build_multitrack_song(
+        [{"name": "Guitar", "tuning": tuning or _DEFAULT_GUITAR_TUNING,
+          "tab_notes": tab_notes, "capo": capo}],
+        bpm=bpm, title=title)
 
 
 def write_gp(tab_notes: list[TabNote], out_path: str, bpm: float = 120.0,
@@ -220,5 +318,15 @@ def write_gp(tab_notes: list[TabNote], out_path: str, bpm: float = 120.0,
     if ext not in _EXT_TO_VERSION:
         raise ValueError(f"Formato no soportado: {ext} (usa .gp5/.gp4/.gp3)")
     song = build_song(tab_notes, bpm=bpm, title=title, tuning=tuning, capo=capo)
+    gp.write(song, out_path, version=_EXT_TO_VERSION[ext])
+    return out_path
+
+
+def write_multitrack_gp(instruments: list[dict], out_path: str, bpm: float = 120.0,
+                        title: str = "Audio2Tab", beats=None) -> str:
+    ext = os.path.splitext(out_path)[1].lower()
+    if ext not in _EXT_TO_VERSION:
+        raise ValueError(f"Formato no soportado: {ext} (usa .gp5/.gp4/.gp3)")
+    song = build_multitrack_song(instruments, bpm=bpm, title=title, beats=beats)
     gp.write(song, out_path, version=_EXT_TO_VERSION[ext])
     return out_path

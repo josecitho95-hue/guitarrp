@@ -78,6 +78,50 @@ def estimate_tempo(audio_path: str, sr: int = 22050, default: float = 120.0) -> 
         return default
 
 
+def estimate_beats(audio_path: str, sr: int = 22050, target_bpm: float | None = None):
+    """Rastrea los beats del audio. Devuelve (beat_times: np.ndarray, bpm).
+
+    Permite cuantizar relativo a los beats reales (corrige el desfase de fase del
+    grid fijo, que asume rejilla desde t=0). `target_bpm` (p.ej. el de
+    estimate_tempo, ya corregido de half-time) sirve de referencia: si el pulso
+    detectado está cerca de la mitad, se insertan beats intermedios para llegar a
+    la rejilla real de negras (librosa suele detectar half-time en metal rápido).
+    """
+    import numpy as np
+    try:
+        import librosa
+    except ImportError:
+        return np.array([]), 120.0
+    try:
+        y, _ = librosa.load(audio_path, sr=sr, mono=True)
+        if y.size == 0:
+            return np.array([]), 120.0
+        tempo, beats = librosa.beat.beat_track(y=y, sr=sr, units="time")
+        bpm = float(tempo if not hasattr(tempo, "__len__") else tempo[0])
+        beats = np.asarray(beats, dtype=float)
+        if len(beats) < 2:
+            return beats, round(bpm, 1)
+
+        # Corrección half-time: duplicar beats si el pulso está a ~la mitad del
+        # tempo de referencia (o, sin referencia, si la densidad de onsets es alta).
+        double = False
+        if target_bpm and target_bpm > 0:
+            if abs(bpm * 2 - target_bpm) < 0.2 * target_bpm:
+                double = True
+        else:
+            onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+            onsets = librosa.onset.onset_detect(y=y, sr=sr, onset_envelope=onset_env)
+            onset_rate = len(onsets) / (len(y) / sr)
+            double = 60 <= bpm <= 140 and onset_rate > 5.0
+        if double:
+            mids = (beats[:-1] + beats[1:]) / 2.0
+            beats = np.sort(np.concatenate([beats, mids]))
+            bpm *= 2
+        return beats, round(bpm, 1)
+    except Exception:
+        return np.array([]), 120.0
+
+
 def tempo_from_midi(midi_path: str, default: float = 120.0) -> float:
     """Lee el tempo de un MIDI (primer cambio de tempo)."""
     try:

@@ -23,6 +23,9 @@ TUNINGS = {
     "drop_d": {1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 38},
 }
 
+# Bajo de 4 cuerdas: 1=Sol -> 4=Mi grave (G2 D2 A1 E1).
+BASS_TUNING = {1: 43, 2: 38, 3: 33, 4: 28}
+
 MAX_FRET = 22
 ONSET_EPS = 0.035       # notas que empiezan dentro de esta ventana = acorde (s)
 MAX_EVENT_OPTIONS = 24  # poda de asignaciones por evento
@@ -135,6 +138,24 @@ def assign_tab(notes: list[Note], tuning: dict[int, int] | None = None,
             ))
     tab_notes.sort(key=lambda t: (t.start, -t.string))
     return tab_notes
+
+
+def assign_drums(notes: list[Note]) -> list[TabNote]:
+    """Mapea notas de percusión a TabNotes para una pista de batería de GP.
+
+    La percusión no tiene cuerda/traste: `fret` guarda el número MIDI de
+    percusión (36=bombo, 38=caja, 42=hi-hat...) y `string` (1-6) es solo un slot
+    para separar golpes simultáneos (GP no admite dos notas en la misma cuerda
+    en un beat). Hasta 6 golpes simultáneos; el resto se descarta.
+    """
+    tab: list[TabNote] = []
+    for ev in _group_events(notes):
+        hits = sorted(ev.notes, key=lambda n: n.pitch)[:6]
+        for slot, n in enumerate(hits, start=1):
+            tab.append(TabNote(pitch=n.pitch, start=n.start, end=n.end,
+                               velocity=n.velocity, string=slot, fret=n.pitch))
+    tab.sort(key=lambda t: (t.start, t.string))
+    return tab
 
 
 def _fallback_assign_tab(notes: list[Note], tuning: dict[int, int]) -> list[TabNote]:
