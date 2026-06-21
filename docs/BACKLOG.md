@@ -166,16 +166,17 @@ traste-medio no separa Eb de estándar). Posible vía futura: probar candidatas 
 idiomática + contexto, o pedir al usuario (la sabe del tab oficial). 🟢
 
 ### Notación rítmica (🟠 patrón clave del metal)
-**RHY-01 — Cuantización de tresillos / galope.** ✅ *HECHO (opt-in `--triplets`).* La cuantización
-recta a semicorcheas no representaba tresillos; The Trooper usa **606 tresillos (3:2) = 21%** del
-oficial (el galope). *Implementado:* rejilla de 48/compás (12 subdiv/beat) con tuplets GP
-(`beat.duration.tuplet`), **opt-in** (default = rejilla recta, cero regresión). Claves del fix
-(`to_gp`): (a) **sesgo hacia recto** (`straight_bias=8`) en el snap de onset → solo tresillo si el
-onset está casi exacto (evita falsos por jitter); (b) **fin forzado a recto** + **duración = brecha
-entre onsets** (la señal de tresillo es el onset, no la duración de nota suelta). Resultado en
-Trooper: **569 tresillos en las 2 guitarras (vs 606 oficial, 94%)**; DTW sin cambio (chroma es
-invariante al ritmo); modo recto idéntico (Back in Black 77.9% sin regresión). 33 tests verdes
-(+3 nuevos). *Hecho: sesión 21 jun.*
+**RHY-01 — Cuantización de tresillos / galope.** ✅ *HECHO (opt-in `--triplets`, PR #15).* La
+cuantización recta a semicorcheas no representaba tresillos; The Trooper usa **~582 tresillos (3:2)**
+del oficial (el galope). *Implementado:* rejilla de 48/compás con tuplets GP, **opt-in** (default =
+recto, cero regresión). **Lección:** la 1ª impl quedó ROTA (notas rojas, 32avos, ilegible) por
+mezclar posiciones rectas y de tresillo dentro del mismo beat → compases desbordados. La métrica
+chroma NO detecta esto → **validar SIEMPRE proxies visuales (desborde=0, 32avos, ligaduras)**.
+*Fix correcto (`to_gp`):* (a) **decisión POR BEAT** (`_make_to_slot_triplet`: cada beat recto O
+tresillo, nunca mezclado; usa onsets de todas las pistas); (b) `_largest_fit(avoid_one)` nunca deja
+1 slot suelto (sin figura limpia en rejilla 48 → desbordaría); (c) `prefer_gap` (duración = brecha
+entre onsets). Resultado Trooper: **desborde=0, 32avos=0, 323 tresillos en guitarras** (de 582
+oficial; conservador). Modo recto idéntico. 34 tests verdes (+test que guarda contra desborde).
 
 ### Priors de dominio correcto (🟡 arregla el desajuste GuitarSet→metal)
 **MG-02 — Matriz de inhibición desde DadaGP-metal.** Reconstruir `models/inhibition.npz` (ver
