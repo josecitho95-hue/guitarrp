@@ -153,8 +153,13 @@ de basic_pitch. Feature comercial real. Medible vs el oficial. **Top-1: barato y
 aguja de verdad** (a diferencia del dedup de octavas). 🟢
 **TC-02 — Transcripción consciente de acordes.** Reconocer acorde por compás (ACR) y usarlo de
 prior: conservar tonos del acorde, degradar no-tonos. Limpia sobre-transcripción. 🟡
-**TC-03 — Auto-detección de afinación/drop tuning.** Detectar la grave consistente → sugerir Drop
-D/C/B (medio metal va downtuneado). Mejora digitación. Extiende SH-01. 🟢
+**TC-03 — Afinaciones down-tuned.** ✅ *PARCIAL (manual hecho; auto pendiente/ambiguo).* Tabular
+contenido de Eb en estándar da digitación toda mal (Sweet Child: acuerdo cuerda+traste **0%→59%**
+en Eb). El chroma es invariante a la afinación; la digitación es lo que se LEE. **Hecho:**
+afinaciones manuales en `to_tab.TUNINGS` (eb_standard, d_standard, drop_c) + CLI `--tuning`. **Auto
+pendiente:** detectar la afinación desde audio es AMBIGUO (mismas alturas; el heurístico de
+traste-medio no separa Eb de estándar). Posible vía futura: probar candidatas y elegir por
+idiomática + contexto, o pedir al usuario (la sabe del tab oficial). 🟢
 
 ### Priors de dominio correcto (🟡 arregla el desajuste GuitarSet→metal)
 **MG-02 — Matriz de inhibición desde DadaGP-metal.** Reconstruir `models/inhibition.npz` (ver
