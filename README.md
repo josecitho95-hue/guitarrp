@@ -3,23 +3,36 @@
 Sistema de transcripción de audio de guitarra a tablaturas Guitar Pro mediante un
 pipeline modular de modelos de IA. **Uso personal, ejecución local.**
 
-> Documentos: [arquitectura](docs/ARQUITECTURA.md), [BRD](docs/BRD.docx), [SRS](docs/SRS.docx), [backlog](docs/BACKLOG.md) y [empaquetado](docs/EMPAQUETADO.md).
-> Estado actual: **Fase 6 COMPLETA** — shell Tauri + UI web + visor alphaTab + sincronización bidireccional + re-procesamiento por región + afinaciones/capo avanzados + técnicas expresivas completas (Tiers 1, 2, 3) + digitalización robusta con fallback + Garbage Collection. SOTA `mr_mt3` F1=0.985.
+> Documentos: [arquitectura](docs/ARQUITECTURA.md), [BRD](docs/BRD.docx), [SRS](docs/SRS.docx), [backlog](docs/BACKLOG.md), [empaquetado](docs/EMPAQUETADO.md), [análisis de calidad](docs/ANALISIS_CALIDAD.md), [validación de corpus](docs/VALIDACION_CORPUS.md) y [modelo de guitarra (parqueado)](docs/MODELO_GUITARRA.md).
+>
+> Estado: **Fases 0–6 completas + sesión de calidad**. Shell Tauri + UI + visor alphaTab + HITL
+> (audio sincronizado, re-procesado por región) + afinaciones/capo + técnicas Tier 1/2/3. Además:
+> **score de banda multipista** (2 guitarras paneadas + bajo + batería + voz), **fix de KV-cache**
+> que hizo usable mr_mt3 en canciones reales (>60×), y detección de riffs repetidos. Calidad
+> validada vs el GP oficial de *Master of Puppets*: **DTW ~84% / contenido ~99%** (cerca del techo
+> práctico para mezcla densa — ver [análisis](docs/ANALISIS_CALIDAD.md)).
 
 ## Pipeline
 
 ```
-preproceso → [separación Demucs] → audio→MIDI → MIDI→tab (digitación) → Guitar Pro
-   librosa        (opcional)        Basic Pitch    DP + restricción       PyGuitarPro
-                                                    física                 (.gp5/.gp4/.gp3)
+preproceso → [separación Demucs] → audio→MIDI → MIDI→tab (digitación) → técnicas → Guitar Pro
+   librosa     (estéreo L/R +      basic_pitch    DP + matriz de         Tier 1/2/3  PyGuitarPro
+   + tempo      bajo/batería/voz)   o mr_mt3       inhibición                         (.gp5/.gp4/.gp3)
 ```
 
-Transcriptores:
-- **Audio→MIDI**: `mr_mt3` (familia MT3, SOTA, por defecto) o `basic_pitch` (ligero, sin GPU).
-- **MIDI→Tab**: algoritmo de programación dinámica que minimiza el movimiento de mano
-  con restricciones físicas (una cuerda por nota, span de acorde limitado, posiciones
-  válidas) — hace de "matriz de inhibición" ligera.
-- **Separación**: cableada pero desactivada por defecto (pesada).
+Transcriptores (audio→MIDI):
+- **`basic_pitch`** (Spotify, ONNX): ligero, rápido, sin GPU obligatoria. Default práctico para
+  guitarra/bajo y para canciones densas (mr_mt3 sobre-transcribe en metal).
+- **`mr_mt3`** (familia MT3, SOTA en GuitarSet, F1 0.850): multi-instrumento; **única vía para
+  transcribir batería** (percusión). Usable en canciones largas gracias al fix de KV-cache
+  (`_mt3_compat`): de >2 h a ~3.8 min.
+
+MIDI→Tab: programación dinámica que minimiza el movimiento de mano con la **matriz de inhibición**
+(restricción física: una cuerda por nota, span de acorde limitado, posiciones válidas).
+
+**Separación (Demucs) + score multipista**: `--separate` aísla la guitarra; `--multi-instrument`
+añade bajo y batería en pistas separadas; `--stereo-guitars` recupera las **2 guitarras paneadas
+L/R** (el lever que más mejoró la fidelidad: DTW 76%→84%); `--vocals` añade la melodía vocal.
 
 ## Instalación
 
@@ -39,10 +52,28 @@ python -m venv .venv
 
 # Aislando la guitarra con Demucs (requiere instalar demucs + torch)
 .venv/Scripts/python.exe cli/transcribe.py mezcla.wav -o tab.gp5 --separate --device cuda
+
+# Score de banda completo: 2 guitarras paneadas (L/R) + bajo + batería + voz
+.venv/Scripts/python.exe cli/transcribe.py mezcla.mp3 -o banda.gp5 \
+    --separate --device cuda --multi-instrument --stereo-guitars --vocals
 ```
 
-Opciones: `--bpm`, `--onset-threshold`, `--min-note-ms`, `--work-dir`, formato por
-extensión de `-o` (`.gp5` por defecto, `.gp4`, `.gp3`).
+Opciones principales: `--transcriber {basic_pitch,mr_mt3}`, `--separate`, `--multi-instrument`,
+`--stereo-guitars`, `--vocals`, `--tuning {standard,drop_d}`, `--capo`, `--calibrate`,
+`--open-string-pref {alta,media,baja}`, `--bpm` (auto si se omite), `--work-dir`, formato por
+extensión de `-o` (`.gp5` / `.gp4` / `.gp3`).
+
+### Herramientas de evaluación (`scripts/`)
+```bash
+# Comparar una salida vs un GP oficial (DTW chroma + contenido)
+python scripts/compare_gp.py "oficial.gp3" salida.gp5 --ref-tracks 0,1 --est-tracks 0,1
+# Validar por lotes varios pares (audio + tab oficial) — ver docs/VALIDACION_CORPUS.md
+python scripts/validate_corpus.py corpus/ --device cuda
+# Detectar riffs repetidos (estructura) de una transcripción
+python scripts/detect_structure.py salida.gp5 audio.mp3 --tracks 0,1
+# Generar la matriz de inhibición data-driven (opt-in) desde GuitarSet
+python scripts/build_inhibition.py
+```
 
 ## App de escritorio (Tauri — Fase 3)
 
@@ -83,23 +114,38 @@ curl -F "file=@cancion.wav" -F "transcriber=mr_mt3" -F "open_string_pref=alta" \
      http://127.0.0.1:8765/jobs
 ```
 
+> ⚠️ Los flags de **score de banda** (`--multi-instrument`, `--stereo-guitars`, `--vocals`) y la
+> detección de estructura son por ahora **solo CLI**; exponerlos por el sidecar + UI está
+> pendiente (ver `SIDE-01` en el backlog).
+
 ## Tests
 
-Tests de humo del núcleo (digitación + inhibición + export GP), rápidos y sin modelos pesados:
+**33 tests** del núcleo (digitación + inhibición + export GP + multipista + percusión +
+estructura + CLI + sidecar + reprocess), rápidos y sin modelos pesados:
 
 ```bash
-python tests/test_pipeline.py        # runner standalone
-python -m pytest tests/ -q           # si tienes pytest
+python tests/test_pipeline.py     # 14 — digitación, inhibición, export, técnicas
+python tests/test_multitrack.py   # 10 — multipista, percusión, drums, voz, beats, matriz aprendida
+python tests/test_structure.py    #  5 — detección de riffs repetidos
+python tests/test_cli.py          #     CLI básico + parámetros avanzados
+python tests/test_reprocess.py    #     re-procesado por región
+python tests/test_sidecar.py      #     ciclo de vida de un job
 ```
 
 ## Estructura
 
 ```
-sidecar/pipeline/   # etapas: preprocess, separate, transcribe, to_tab, to_gp, types
-cli/transcribe.py   # orquestador CLI (Fase 0)
-docs/               # BRD.docx, SRS.docx (+ generadores build_*.js)
-samples/            # audio/MIDI de prueba y salidas .gp
-storage/jobs/       # artefactos intermedios por ejecución (gitignored)
+sidecar/pipeline/   # etapas: preprocess, separate, transcribe, to_tab, inhibition,
+                    #   techniques, to_gp, structure, reprocess, runner, _mt3_compat, types
+sidecar/            # server.py, queue.py, db.py, config.py (API local + cola + SQLite)
+cli/transcribe.py   # orquestador CLI
+src-tauri/ · ui/    # shell de escritorio (Tauri) + frontend (visor alphaTab, HITL)
+scripts/            # compare_gp, compare_excerpt, validate_corpus, detect_structure,
+                    #   build_inhibition, eval_fretting, validate_kvcache
+bench/              # benchmark de F1 sobre GuitarSet
+docs/               # arquitectura, BRD/SRS, backlog, análisis de calidad, validación
+tests/              # 33 tests del núcleo
+samples/ · storage/ # audio/MIDI de prueba · artefactos por ejecución (gitignored)
 ```
 
 ## Fase 1 — Benchmark de calidad
@@ -140,15 +186,25 @@ Resultados sobre **GuitarSet** (audio mic), F1 de onset a 50 ms:
 - Gestión de VRAM (`sidecar/pipeline/gpu.py`): `free_vram()` con `gc.collect()` +
   `torch.cuda.empty_cache()` para la carga secuencial de modelos en 8 GB.
 
-## Limitaciones de Fase 0 (conocidas)
+## Calidad: qué funciona y qué no (medido)
 
-- La calidad de la transcripción depende de Basic Pitch; en mezcla completa conviene
-  `--separate`. La transcripción polifónica desde mezcla es el caso más difícil.
-- La cuantización rítmica ajusta cada onset a una rejilla de semicorcheas con una única
-  duración por nota (sin ligaduras); es suficiente para un borrador abrible y editable.
-- Aún sin detección de técnicas expresivas (Fase 4) ni UI/visor (Fase 3–5).
+La meta es un **borrador editable de alta calidad**, no transcripción perfecta (ni las
+herramientas comerciales lo logran desde mezcla). Validado vs el GP oficial de *Master of
+Puppets* (ver [`ANALISIS_CALIDAD.md`](docs/ANALISIS_CALIDAD.md)):
+
+- ✅ **Lo que mejoró la fidelidad**: transcripción **estéreo** (recuperar las 2 guitarras
+  paneadas L/R) → DTW 76%→84%. Funciona porque **añade información real**.
+- ❌ **Lo que NO ayudó** (probado con datos): tempo dinámico, limpieza de notas, snap-to-escala,
+  matriz de inhibición de GuitarSet, consenso por repetición. El metric es robusto y la música
+  real (cromatismo, variación) excede los priors → estamos cerca del **techo práctico**.
+- ⛔ **Modelo específico de guitarra** (mayor lever de fidelidad): parqueado — ningún modelo SOTA
+  publica pesos (ver [`MODELO_GUITARRA.md`](docs/MODELO_GUITARRA.md)).
 
 ## Próximos pasos
 
-- **Fase 5**: Human-in-the-loop (HITL) completo con reproducción sincronizada de audio MP3 original, selección de rango y re-procesado por región (recorte -> re-transcripción -> empalme).
-- Mejoras opcionales de calidad: afinar `MT3_TIME_SCALE`; reintentar `yourmt3`/`mt3_pytorch`.
+- **UX-04 — "Arregla un riff una vez, propágalo a sus repeticiones"**: el cimiento
+  (`structure.py`, detecta riffs repetidos) ya está; falta el consumo en la UI alphaTab.
+- **UX-01 — Mapa de confianza** en el visor (revisar primero lo peor).
+- **Validación cross-género**: probar más artistas/subgéneros con `scripts/validate_corpus.py`
+  (ver [`VALIDACION_CORPUS.md`](docs/VALIDACION_CORPUS.md)).
+- Backlog completo (con IDs y prioridades) en [`docs/BACKLOG.md`](docs/BACKLOG.md).

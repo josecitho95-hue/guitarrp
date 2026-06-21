@@ -195,6 +195,13 @@ instancias**. Combina lo que funciona (detección) con el lever real (revisión 
 detección alimenta el etiquetado de secciones (LLM-01) y mostrar estructura en el visor.
 **Top recomendado actual.** Cimiento Python (`structure.py`) contenido; consumo UI después. 🟡
 
+### Integración sidecar/UI (🟡 cerrar el gap CLI→app)
+**SIDE-01 — Exponer score de banda + estructura por el sidecar y la UI.** Los flags
+`--multi-instrument`, `--stereo-guitars`, `--vocals` y la detección de estructura
+(`structure.json`) hoy son **solo CLI** (`server.py` no los pasa). Falta: añadirlos a
+`POST /jobs` (`server.py` + `PipelineParams`), checkboxes en el wizard (`ui/`), y consumir
+`structure.json` en el visor (cimiento de UX-04/etiquetado de secciones). 🟡
+
 ### Validación (🟢 robustez cross-género)
 **VAL-01 — Probar más artistas/géneros de metal.** Solo validamos MoP. Harness listo
 (`scripts/validate_corpus.py`): coloca pares (audio + tab oficial de **mySongBook**) en una
