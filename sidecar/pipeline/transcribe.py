@@ -57,9 +57,23 @@ _MT3_MODELS = {}
 MT3_TIME_SCALE = {"mr_mt3": 1.010}
 
 
+def _mt3_result_to_pm(result):
+    """Normaliza la salida de mdl.transcribe (PrettyMIDI o mido.MidiFile)."""
+    if hasattr(result, "instruments"):
+        return result
+    import os
+    import tempfile
+
+    import pretty_midi
+    tmp = os.path.join(tempfile.gettempdir(), "a2t_mt3_out.mid")
+    result.save(tmp)
+    return pretty_midi.PrettyMIDI(tmp)
+
+
 def transcribe_mt3(audio_path: str, model: str = "mr_mt3",
                    guitar_only: bool = False, time_scale: float | None = None,
-                   device: str | None = None) -> list[Note]:
+                   device: str | None = None, chunk_s: float = 30.0,
+                   overlap_s: float = 2.0, progress=None) -> list[Note]:
     """Transcribe con la familia MT3 (mt3-infer). Auto-descarga checkpoint.
 
     Path A SOTA. Requiere los shims de `_mt3_compat` para correr el T5 vendorizado
@@ -67,9 +81,13 @@ def transcribe_mt3(audio_path: str, model: str = "mr_mt3",
     actual (yourmt3 tiene incompatibilidades profundas; mt3_pytorch falla al clonar
     en Windows). `guitar_only=True` filtra a programas de guitarra (24-31).
     `time_scale` corrige la deriva temporal del conversor (ver MT3_TIME_SCALE).
+
+    El audio se procesa en bloques de `chunk_s` segundos con `overlap_s` de solape
+    de contexto (descartado al empalmar) para dar visibilidad de progreso/ETA y
+    acotar el pico de VRAM en canciones largas. `progress(frac, msg)` se llama por
+    bloque; si es None, se imprime a stdout.
     """
-    import os
-    import tempfile
+    import time as _time
 
     import librosa
 
@@ -88,28 +106,52 @@ def transcribe_mt3(audio_path: str, model: str = "mr_mt3",
         _MT3_MODELS[model] = load_model(model, device=device)
     mdl = _MT3_MODELS[model]
 
+    sr = 16000
+    y, _ = librosa.load(audio_path, sr=sr, mono=True)
+    dur = len(y) / sr
 
-    y, _ = librosa.load(audio_path, sr=16000, mono=True)
-    result = mdl.transcribe(y, sr=16000)
-
-    # La salida puede ser pretty_midi.PrettyMIDI o mido.MidiFile -> normalizar.
-    if hasattr(result, "instruments"):
-        pm = result
-    else:
-        tmp = os.path.join(tempfile.gettempdir(), "a2t_mt3_out.mid")
-        result.save(tmp)
-        import pretty_midi
-        pm = pretty_midi.PrettyMIDI(tmp)
+    # Un solo bloque si la pista cabe holgadamente; si no, trocear con solape.
+    step = max(chunk_s, 1.0)
+    win = step + max(overlap_s, 0.0)
+    starts = [0.0] if dur <= win else [i * step for i in range(int(dur // step) + 1)]
+    n_chunks = len(starts)
 
     out: list[Note] = []
-    for inst in pm.instruments:
-        if getattr(inst, "is_drum", False):
+    t0 = _time.time()
+    for ci, s0 in enumerate(starts):
+        s1 = min(s0 + win, dur)
+        seg = y[int(s0 * sr):int(s1 * sr)]
+        if len(seg) < int(0.1 * sr):
             continue
-        if guitar_only and not (24 <= getattr(inst, "program", 0) <= 31):
-            continue
-        for n in inst.notes:
-            out.append(Note(pitch=int(n.pitch), start=float(n.start) * time_scale,
-                            end=float(n.end) * time_scale, velocity=int(n.velocity)))
+        pm = _mt3_result_to_pm(mdl.transcribe(seg, sr=sr))
+        # Limite del nucleo de este bloque: descartar notas del solo solape (las
+        # cubre el siguiente bloque desde su nucleo). El ultimo bloque se queda todo.
+        core_end = (s1 - s0) if ci == n_chunks - 1 else step
+        for inst in pm.instruments:
+            if getattr(inst, "is_drum", False):
+                continue
+            if guitar_only and not (24 <= getattr(inst, "program", 0) <= 31):
+                continue
+            for n in inst.notes:
+                if float(n.start) >= core_end:
+                    continue
+                out.append(Note(
+                    pitch=int(n.pitch),
+                    start=(s0 + float(n.start)) * time_scale,
+                    end=(s0 + float(n.end)) * time_scale,
+                    velocity=int(n.velocity),
+                ))
+        done = ci + 1
+        elapsed = _time.time() - t0
+        eta = (elapsed / done) * (n_chunks - done)
+        msg = (f"[mt3] bloque {done}/{n_chunks} "
+               f"({s0:.0f}-{s1:.0f}s de {dur:.0f}s) "
+               f"| {elapsed:.0f}s transcurridos, ETA ~{eta:.0f}s")
+        if progress is not None:
+            progress(done / n_chunks, msg)
+        else:
+            print(msg, flush=True)
+
     out.sort(key=lambda n: (n.start, n.pitch))
     return out
 

@@ -64,7 +64,11 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
 
         prog("transcribing", 0.4)
         if params.transcriber == "mr_mt3":
-            notes = transcribe.transcribe_mt3(wav, model="mr_mt3", device=params.device)
+            def _mt3_prog(frac, msg):
+                print(msg, flush=True)
+                prog("transcribing", 0.4 + 0.35 * frac)
+            notes = transcribe.transcribe_mt3(
+                wav, model="mr_mt3", device=params.device, progress=_mt3_prog)
 
         else:
             notes = transcribe.transcribe_audio(
