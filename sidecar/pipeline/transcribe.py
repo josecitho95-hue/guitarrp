@@ -73,7 +73,8 @@ def _mt3_result_to_pm(result):
 def transcribe_mt3(audio_path: str, model: str = "mr_mt3",
                    guitar_only: bool = False, time_scale: float | None = None,
                    device: str | None = None, chunk_s: float = 30.0,
-                   overlap_s: float = 2.0, progress=None) -> list[Note]:
+                   overlap_s: float = 2.0, progress=None,
+                   drums_only: bool = False) -> list[Note]:
     """Transcribe con la familia MT3 (mt3-infer). Auto-descarga checkpoint.
 
     Path A SOTA. Requiere los shims de `_mt3_compat` para correr el T5 vendorizado
@@ -128,10 +129,15 @@ def transcribe_mt3(audio_path: str, model: str = "mr_mt3",
         # cubre el siguiente bloque desde su nucleo). El ultimo bloque se queda todo.
         core_end = (s1 - s0) if ci == n_chunks - 1 else step
         for inst in pm.instruments:
-            if getattr(inst, "is_drum", False):
-                continue
-            if guitar_only and not (24 <= getattr(inst, "program", 0) <= 31):
-                continue
+            is_drum = getattr(inst, "is_drum", False)
+            if drums_only:
+                if not is_drum:
+                    continue   # solo percusión (pitch = nota MIDI de batería)
+            else:
+                if is_drum:
+                    continue
+                if guitar_only and not (24 <= getattr(inst, "program", 0) <= 31):
+                    continue
             for n in inst.notes:
                 if float(n.start) >= core_end:
                     continue

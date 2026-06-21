@@ -140,6 +140,24 @@ def assign_tab(notes: list[Note], tuning: dict[int, int] | None = None,
     return tab_notes
 
 
+def assign_drums(notes: list[Note]) -> list[TabNote]:
+    """Mapea notas de percusión a TabNotes para una pista de batería de GP.
+
+    La percusión no tiene cuerda/traste: `fret` guarda el número MIDI de
+    percusión (36=bombo, 38=caja, 42=hi-hat...) y `string` (1-6) es solo un slot
+    para separar golpes simultáneos (GP no admite dos notas en la misma cuerda
+    en un beat). Hasta 6 golpes simultáneos; el resto se descarta.
+    """
+    tab: list[TabNote] = []
+    for ev in _group_events(notes):
+        hits = sorted(ev.notes, key=lambda n: n.pitch)[:6]
+        for slot, n in enumerate(hits, start=1):
+            tab.append(TabNote(pitch=n.pitch, start=n.start, end=n.end,
+                               velocity=n.velocity, string=slot, fret=n.pitch))
+    tab.sort(key=lambda t: (t.start, t.string))
+    return tab
+
+
 def _fallback_assign_tab(notes: list[Note], tuning: dict[int, int]) -> list[TabNote]:
     """Asignación de fallback extremadamente robusta si falla el algoritmo DP."""
     tab_notes: list[TabNote] = []

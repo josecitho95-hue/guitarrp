@@ -219,14 +219,22 @@ def build_multitrack_song(instruments: list[dict], bpm: float = 120.0,
         track = M.Track(song, idx + 1)
         track.name = inst.get("name", f"Track {idx + 1}")
         track.offset = inst.get("capo", 0)
-        tuning = inst.get("tuning") or _DEFAULT_GUITAR_TUNING
-        track.strings = [M.GuitarString(i + 1, tuning[s])
-                         for i, s in enumerate(sorted(tuning))]
-        if inst.get("midi_program") is not None:
-            try:
-                track.channel.instrument = int(inst["midi_program"])
-            except Exception:
-                pass
+        if inst.get("percussion"):
+            # Pista de batería: canal MIDI 10 (idx 9), 6 cuerdas placeholder.
+            # En estas notas `value` (=fret de la TabNote) es el nº MIDI de percusión.
+            track.isPercussionTrack = True
+            track.channel.channel = 9
+            track.channel.effectChannel = 9
+            track.strings = [M.GuitarString(i + 1, 0) for i in range(6)]
+        else:
+            tuning = inst.get("tuning") or _DEFAULT_GUITAR_TUNING
+            track.strings = [M.GuitarString(i + 1, tuning[s])
+                             for i, s in enumerate(sorted(tuning))]
+            if inst.get("midi_program") is not None:
+                try:
+                    track.channel.instrument = int(inst["midi_program"])
+                except Exception:
+                    pass
         _fill_track_measures(track, song.measureHeaders, ev, evd, ss, n_measures)
         song.tracks.append(track)
 

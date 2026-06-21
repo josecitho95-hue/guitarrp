@@ -98,25 +98,39 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
         if params.capo > 0:
             guitar_dig = {s: p + params.capo for s, p in guitar_tuning.items()}
 
-        # --- Multi-instrumento: guitarra + bajo en pistas separadas ---
+        # --- Multi-instrumento: guitarra + bajo (+ batería) en pistas separadas ---
         if params.multi_instrument and stems and "bass" in stems:
             prog("transcribing", 0.4)
 
             def _gtr_prog(frac, msg):
                 print(msg, flush=True)
-                prog("transcribing", 0.4 + 0.2 * frac)
+                prog("transcribing", 0.4 + 0.15 * frac)
 
             def _bass_prog(frac, msg):
                 print(msg, flush=True)
-                prog("transcribing", 0.6 + 0.15 * frac)
+                prog("transcribing", 0.55 + 0.1 * frac)
+
+            def _drum_prog(frac, msg):
+                print(msg, flush=True)
+                prog("transcribing", 0.65 + 0.13 * frac)
 
             guitar_tab = _stem_to_tab(stems.get("guitar", wav), params, guitar_dig,
                                       transcribe.GUITAR_MIN_HZ, transcribe.GUITAR_MAX_HZ,
                                       _gtr_prog)
-            prog("transcribing", 0.6)
+            prog("transcribing", 0.55)
             bass_tab = _stem_to_tab(stems["bass"], params, to_tab.BASS_TUNING,
                                     30.0, 500.0, _bass_prog)
-            if not guitar_tab and not bass_tab:
+
+            # Batería: solo mr_mt3 transcribe percusión (instrumentos is_drum).
+            drum_tab = []
+            if "drums" in stems:
+                prog("transcribing", 0.65)
+                drum_notes = transcribe.transcribe_mt3(
+                    stems["drums"], model="mr_mt3", device=params.device,
+                    drums_only=True, progress=_drum_prog)
+                drum_tab = to_tab.assign_drums(drum_notes)
+
+            if not guitar_tab and not bass_tab and not drum_tab:
                 raise RuntimeError("No se detectaron notas en el audio.")
 
             prog("tabbing", 0.8)
@@ -126,12 +140,15 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
                 {"name": "Bass", "tuning": to_tab.BASS_TUNING, "tab_notes": bass_tab,
                  "midi_program": 33},
             ]
+            if drum_tab:
+                instruments.append({"name": "Drums", "tab_notes": drum_tab,
+                                    "percussion": True})
             to_gp.write_multitrack_gp(instruments, out_path, bpm=bpm, title=title)
             _save_tab_json(work_dir, guitar_tab)
             prog("done", 1.0)
-            return {"output": out_path, "n_tab": len(guitar_tab) + len(bass_tab),
-                    "n_notes": len(guitar_tab) + len(bass_tab), "bpm": round(bpm, 1),
-                    "tracks": [i["name"] for i in instruments]}
+            n_total = len(guitar_tab) + len(bass_tab) + len(drum_tab)
+            return {"output": out_path, "n_tab": n_total, "n_notes": n_total,
+                    "bpm": round(bpm, 1), "tracks": [i["name"] for i in instruments]}
 
         # --- Single-track (guitarra) ---
         if stems:
