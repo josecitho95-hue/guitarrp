@@ -166,15 +166,17 @@ traste-medio no separa Eb de estándar). Posible vía futura: probar candidatas 
 idiomática + contexto, o pedir al usuario (la sabe del tab oficial). 🟢
 
 ### Notación rítmica (🟠 patrón clave del metal)
-**RHY-01 — Cuantización de tresillos / galope.** *Etapa 5 (to_gp).* Nuestra cuantización es a
-semicorcheas (rejilla de 16/compás) y **no puede representar tresillos**. Medido en The Trooper
-(Iron Maiden): el oficial usa **606 tresillos (3:2) = 21% de los beats de guitarra** (el galope
-"da-da-dum"), omnipresente en NWOBHM/thrash. Sin tresillos el tab se ve mal para cualquier
-guitarrista. *Solución:* rejilla de 48/compás (12 subdiv/beat soporta 16ths Y tresillos),
-detección y emisión de tuplets GP (`beat.duration.tuplet`). *Impacto:* 🟠 medio-alto — toca la
-cuantización de `to_gp` (afecta todas las canciones + `structure.py` + tests → validar regresión).
-Mejora sobre todo la NOTACIÓN (el DTW podría no moverse: los errores de tiempo de tresillo son
-sub-ventana). Considerar opt-in (`--triplets`) para evitar regresión. *Hallazgo: sesión 21 jun.*
+**RHY-01 — Cuantización de tresillos / galope.** ✅ *HECHO (opt-in `--triplets`, PR #15).* La
+cuantización recta a semicorcheas no representaba tresillos; The Trooper usa **~582 tresillos (3:2)**
+del oficial (el galope). *Implementado:* rejilla de 48/compás con tuplets GP, **opt-in** (default =
+recto, cero regresión). **Lección:** la 1ª impl quedó ROTA (notas rojas, 32avos, ilegible) por
+mezclar posiciones rectas y de tresillo dentro del mismo beat → compases desbordados. La métrica
+chroma NO detecta esto → **validar SIEMPRE proxies visuales (desborde=0, 32avos, ligaduras)**.
+*Fix correcto (`to_gp`):* (a) **decisión POR BEAT** (`_make_to_slot_triplet`: cada beat recto O
+tresillo, nunca mezclado; usa onsets de todas las pistas); (b) `_largest_fit(avoid_one)` nunca deja
+1 slot suelto (sin figura limpia en rejilla 48 → desbordaría); (c) `prefer_gap` (duración = brecha
+entre onsets). Resultado Trooper: **desborde=0, 32avos=0, 323 tresillos en guitarras** (de 582
+oficial; conservador). Modo recto idéntico. 34 tests verdes (+test que guarda contra desborde).
 
 ### Priors de dominio correcto (🟡 arregla el desajuste GuitarSet→metal)
 **MG-02 — Matriz de inhibición desde DadaGP-metal.** Reconstruir `models/inhibition.npz` (ver

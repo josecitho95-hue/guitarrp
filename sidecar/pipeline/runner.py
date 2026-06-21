@@ -34,6 +34,7 @@ class PipelineParams:
     multi_instrument: bool = False    # guitarra + bajo en pistas separadas (requiere separate)
     stereo_guitars: bool = False      # 2 guitarras paneadas L/R (requiere multi_instrument)
     include_vocals: bool = False      # pista de melodía vocal (requiere multi_instrument)
+    triplets: bool = False            # cuantización con tresillos (galope del metal)
 
 
 def _stem_to_tab(stem_wav: str, params: PipelineParams, tuning: dict,
@@ -195,7 +196,8 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
             if vocal_tab:
                 instruments.append({"name": "Vocals", "tuning": to_tab.STANDARD_TUNING,
                                     "tab_notes": vocal_tab, "midi_program": 52})
-            to_gp.write_multitrack_gp(instruments, out_path, bpm=bpm, title=title)
+            to_gp.write_multitrack_gp(instruments, out_path, bpm=bpm, title=title,
+                                      triplets=params.triplets)
             _save_tab_json(work_dir, guitar_insts[0]["tab_notes"])
             _save_structure(work_dir, guitar_insts[0]["tab_notes"], wav, bpm)
             prog("done", 1.0)
@@ -234,7 +236,8 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
     tab = techniques.detect_techniques(tab)
 
     out_path = os.path.splitext(out_path)[0] + "." + params.output_format.lstrip(".")
-    to_gp.write_gp(tab, out_path, bpm=bpm, title=title, tuning=tuning_dict, capo=params.capo)
+    to_gp.write_gp(tab, out_path, bpm=bpm, title=title, tuning=tuning_dict, capo=params.capo,
+                   triplets=params.triplets)
     _save_tab_json(work_dir, tab)
     if not params.from_midi:
         _save_structure(work_dir, tab, wav, bpm)
