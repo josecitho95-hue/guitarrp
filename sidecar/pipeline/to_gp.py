@@ -48,8 +48,10 @@ _DURATIONS_TRIPLET = [
     (1, 32, False, None),       # fusa (resto)
 ]
 
-_GRID_STRAIGHT = {"slots_per_measure": 16, "subdiv": 4, "durations": _DURATIONS_STRAIGHT}
-_GRID_TRIPLET = {"slots_per_measure": 48, "subdiv": 12, "durations": _DURATIONS_TRIPLET}
+_GRID_STRAIGHT = {"slots_per_measure": 16, "subdiv": 4, "durations": _DURATIONS_STRAIGHT,
+                  "avoid_one": False}
+_GRID_TRIPLET = {"slots_per_measure": 48, "subdiv": 12, "durations": _DURATIONS_TRIPLET,
+                 "avoid_one": True}
 
 _EXT_TO_VERSION = {
     ".gp3": (3, 0, 0),
@@ -58,21 +60,27 @@ _EXT_TO_VERSION = {
 }
 
 
-def _largest_fit(slots: int, cap: int, durations=_DURATIONS_STRAIGHT):
-    """Mayor duracion representable que cabe en min(slots, cap). -> (slots,value,dotted,tuplet)."""
+def _largest_fit(slots: int, cap: int, durations=_DURATIONS_STRAIGHT, avoid_one=False):
+    """Mayor duracion que cabe en min(slots, cap). -> (slots,value,dotted,tuplet).
+    Con `avoid_one` (rejilla de tresillos, 48/compás) evita dejar 1 slot suelto: en
+    esa rejilla 1 slot no tiene figura limpia (el 32avo son 1.5 slots) y desbordaría
+    el compás; se elige una figura menor para que el resto sea representable."""
     limit = min(slots, cap)
     for s, value, dotted, tup in durations:
+        if s <= limit and not (avoid_one and (slots - s) == 1):
+            return s, value, dotted, tup
+    for s, value, dotted, tup in durations:        # fallback sin la restricción
         if s <= limit:
             return s, value, dotted, tup
     return 1, durations[-1][1], False, None
 
 
-def _decompose(slots: int, cap: int, durations=_DURATIONS_STRAIGHT):
+def _decompose(slots: int, cap: int, durations=_DURATIONS_STRAIGHT, avoid_one=False):
     """Descompone una duracion (en slots) en lista de (valor, puntillo, tuplet)."""
     out = []
     remaining = slots
     while remaining > 0:
-        s, value, dotted, tup = _largest_fit(remaining, cap, durations)
+        s, value, dotted, tup = _largest_fit(remaining, cap, durations, avoid_one)
         out.append((value, dotted, tup))
         remaining -= s
     return out
@@ -150,41 +158,65 @@ def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote], tuplet
 _DEFAULT_GUITAR_TUNING = {1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 40}
 
 
-def _make_to_slot(beats, bpm: float, subdiv: int = 4, straight_bias: float = 8.0):
-    """Devuelve una función onset_segundos -> slot (entero). `subdiv` = subdivisiones
-    por beat (4 = semicorcheas; 12 = soporta tresillos).
-
-    Con `beats` (tiempos de beat reales del audio) cuantiza RELATIVO a los beats:
-    corrige el desfase de fase (el grid fijo asume rejilla desde t=0) y sigue el
-    pulso real. Sin beats, usa el grid fijo clásico a `bpm`.
-
-    En rejilla de tresillos (subdiv=12), `straight_bias` (>1) sesga el snap hacia la
-    rejilla recta de semicorcheas: solo asigna posición de tresillo si el onset está
-    claramente más cerca de ella (reduce falsos tresillos por jitter de onsets).
-    """
-    step = 3 if subdiv == 12 else 1   # paso de la rejilla recta de 16ths dentro de subdiv
-
-    def snap(f: float) -> int:
-        if step == 1:
-            return int(round(f))
-        full = round(f)                      # rejilla completa (incluye tresillos)
-        straight = round(f / step) * step    # rejilla recta de semicorcheas
-        if abs(f - straight) <= abs(f - full) * straight_bias:
-            return int(straight)
-        return int(full)
-
+def _make_beat_pos(beats, bpm: float):
+    """Devuelve f(onset_segundos) -> posición en beats (float). Con `beats` (tiempos
+    reales del audio) sigue el pulso real; sin ellos, grid fijo a `bpm`."""
     if beats is not None and len(beats) >= 2:
         import numpy as np
         idx = np.arange(len(beats), dtype=float)
         beats = np.asarray(beats, dtype=float)
+        return lambda t: float(np.interp(t, beats, idx))
+    sec_per_beat = 60.0 / bpm
+    return lambda t: t / sec_per_beat
 
-        def to_slot(t: float) -> int:
-            bp = float(np.interp(t, beats, idx))   # posición en beats (clamp a extremos)
-            return snap(bp * subdiv)
-        return to_slot
 
-    grid = (60.0 / bpm) / subdiv
-    return lambda t: snap(t / grid)
+def _make_to_slot(beats, bpm: float, subdiv: int = 4):
+    """onset_segundos -> slot (rejilla recta de `subdiv` por beat). Cuantiza relativo
+    a los beats reales si se dan (corrige fase), si no usa grid fijo a `bpm`."""
+    bp = _make_beat_pos(beats, bpm)
+    return lambda t: int(round(bp(t) * subdiv))
+
+
+# Posiciones (fracción del beat) de cada subdivisión.
+_STRAIGHT_FRACS = (0.0, 0.25, 0.5, 0.75)     # semicorcheas
+_TRIPLET_FRACS = (0.0, 1.0 / 3, 2.0 / 3)     # tresillos de corchea
+
+
+def _make_to_slot_triplet(beats, bpm: float, all_onsets, straight_bias: float = 1.1):
+    """onset -> slot en rejilla de 48/compás (12/beat), decidiendo la subdivisión
+    POR BEAT: cada beat es recto (semicorcheas) O tresillo, nunca mezclado (así un
+    beat nunca produce huecos imposibles que desbordan el compás). Un beat es
+    tresillo solo si sus onsets encajan claramente mejor en la rejilla de tresillo.
+    """
+    from collections import defaultdict
+    bp = _make_beat_pos(beats, bpm)
+
+    by_beat = defaultdict(list)
+    for t in all_onsets:
+        p = bp(t)
+        by_beat[int(p)].append(p - int(p))
+
+    def mean_err(fracs, grid):
+        return sum(min(abs(f - g) for g in grid) for f in fracs) / len(fracs)
+
+    is_trip: dict[int, bool] = {}
+    for beat, fracs in by_beat.items():
+        if len(fracs) < 2:
+            is_trip[beat] = False                 # 1 onset no determina tresillo
+            continue
+        es = mean_err(fracs, _STRAIGHT_FRACS)
+        et = mean_err(fracs, _TRIPLET_FRACS)
+        is_trip[beat] = et * straight_bias < es   # tresillo solo si claramente mejor
+
+    def to_slot(t: float) -> int:
+        p = bp(t)
+        beat = int(p)
+        frac = p - beat
+        if is_trip.get(beat):
+            return beat * 12 + int(round(frac * 3)) * 4   # {0,4,8,12}
+        return beat * 12 + int(round(frac * 4)) * 3       # {0,3,6,9,12}
+
+    return to_slot
 
 
 def _track_layout(tab_notes: list[TabNote], to_slot, to_slot_end=None, prefer_gap=False):
@@ -229,6 +261,7 @@ def _fill_track_measures(track, headers, events, ev_dur, sorted_slots, n_measure
     """Rellena track.measures con beats/silencios cuantizados, hasta n_measures."""
     spm = grid["slots_per_measure"]
     durs = grid["durations"]
+    a1 = grid.get("avoid_one", False)
     track.measures = []
     for mi in range(n_measures):
         measure = M.Measure(track, headers[mi])
@@ -242,14 +275,14 @@ def _fill_track_measures(track, headers, events, ev_dur, sorted_slots, n_measure
             if t in events:
                 notes = events[t]
                 cap = m_end - t
-                s, value, dotted, tup = _largest_fit(ev_dur[t], cap, durs)
+                s, value, dotted, tup = _largest_fit(ev_dur[t], cap, durs, a1)
                 voice.beats.append(_make_beat(voice, value, dotted, notes, tup))
                 t += s
             else:
                 next_slots = [s for s in sorted_slots if m_start <= s < m_end and s > t]
                 gap_end = min(next_slots) if next_slots else m_end
                 gap = gap_end - t
-                for value, dotted, tup in _decompose(gap, m_end - t, durs):
+                for value, dotted, tup in _decompose(gap, m_end - t, durs, a1):
                     voice.beats.append(_make_beat(voice, value, dotted, [], tup))
                 t = gap_end
 
@@ -312,10 +345,15 @@ def build_multitrack_song(instruments: list[dict], bpm: float = 120.0,
     song.artist = "Audio2Tab"
     song.tempo = int(round(bpm))
     template_ts = song.measureHeaders[0].timeSignature
-    to_slot = _make_to_slot(beats, bpm, grid["subdiv"])                  # onset (sesgado)
-    # Fin: forzado a la rejilla recta — la señal de tresillo es la brecha entre onsets,
-    # no la duración de una nota suelta (evita falsos tresillos en la última nota/staccato).
-    to_slot_end = _make_to_slot(beats, bpm, grid["subdiv"], straight_bias=1000.0)
+    if triplets:
+        # Decisión de subdivisión POR BEAT usando los onsets de todas las pistas
+        # (así todas comparten la misma rejilla por beat y nada desborda).
+        all_onsets = [tn.start for inst in instruments for tn in inst["tab_notes"]]
+        to_slot = _make_to_slot_triplet(beats, bpm, all_onsets)
+        to_slot_end = to_slot
+    else:
+        to_slot = _make_to_slot(beats, bpm, grid["subdiv"])
+        to_slot_end = to_slot
 
     layouts = []
     max_total = 0
