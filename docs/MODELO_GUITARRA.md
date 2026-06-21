@@ -1,10 +1,39 @@
 # Integración de un modelo de transcripción específico de guitarra
 
-> **Estado:** propuesta de implementación para el equipo de desarrollo.
+> **Estado:** ⛔ **BLOQUEADO por falta de pesos pre-entrenados** (verificado 2026-06-20).
 > **Prioridad:** Should Have (ver `BACKLOG.md`, ítem **MG-01**).
 > **Origen:** sesión de calidad del 2026-06-20. Tras descartar con datos varios
 > levers (tempo dinámico, limpieza de notas) y validar uno real (transcripción
-> estéreo, DTW 76%→84%), este es **el único lever de fidelidad que queda**.
+> estéreo, DTW 76%→84%), este era **el único lever de fidelidad que quedaba**.
+
+---
+
+## ⛔ ACTUALIZACIÓN (2026-06-20): bloqueo por disponibilidad de pesos
+
+Se ejecutó el paso de viabilidad (§7, riesgo #1) y **ningún modelo SOTA específico
+de guitarra publica pesos de inferencia descargables**:
+
+| Modelo | Pesos públicos | Notas |
+|--------|----------------|-------|
+| High-Resolution Guitar Transcription (arXiv 2402.15258) | ❌ NO | Solo "companion site" (xavriley.github.io); no hay repo de inferencia ni checkpoint. |
+| FretNet (github.com/cwitkowitz/guitar-transcription-continuous) | ❌ NO | Solo código de entrenamiento (6-fold CV sobre GuitarSet). Hay que entrenarlo. |
+| Robustez guitarra eléctrica (arXiv 2405.14679) | ❌ NO | Código reproducible (robust-guitar-tabs.github.io) sin pesos. TabCNN. **Avisa que falla en contenido armónico multi-cuerda simultáneo (= metal).** |
+| Omnizart (pip, `download-checkpoints`) | ✅ SÍ | Pero **genérico** (no guitarra), TensorFlow viejo (conflictos protobuf como basic_pitch). Improbable que supere a basic_pitch. |
+
+**Conclusión:** integrar un modelo de guitarra SOTA **requiere entrenarlo**, lo que
+contradice la decisión núcleo del proyecto ("no entrenar"). Además GuitarSet es
+acústico/limpio → desajuste de dominio con metal eléctrico distorsionado. Para
+**mezcla densa**, el valor esperado es bajo y el baseline estéreo (DTW ~84%)
+probablemente esté cerca del techo práctico. Para **material limpio/acústico** sí
+valdría más.
+
+**Decisión (2026-06-20):** MG-01 queda **parqueado**. Reactivar solo si: (a) aparece
+un modelo de guitarra con pesos descargables, o (b) se acepta entrenar (revisar
+política) — entrenar FretNet/TabCNN en GuitarSet es factible en la 4070 (horas),
+pero con retorno incierto en metal denso. La sección de implementación de abajo
+sigue válida para cuando se desbloquee.
+
+---
 
 ---
 
