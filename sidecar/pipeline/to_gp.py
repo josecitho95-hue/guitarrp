@@ -15,19 +15,41 @@ from guitarpro import models as M
 
 from .types import TabNote
 
-# (slots de semicorchea, valor de duracion GP, con puntillo)
-# valor GP: 1=redonda 2=blanca 4=negra 8=corchea 16=semicorchea
-_DURATIONS = [
-    (16, 1, False),   # redonda
-    (12, 2, True),    # blanca con puntillo
-    (8, 2, False),    # blanca
-    (6, 4, True),     # negra con puntillo
-    (4, 4, False),    # negra
-    (3, 8, True),     # corchea con puntillo
-    (2, 8, False),    # corchea
-    (1, 16, False),   # semicorchea
+# Tabla de duraciones: (slots, valor_GP, puntillo, tuplet) — tuplet=None o (enters,times).
+# valor GP: 1=redonda 2=blanca 4=negra 8=corchea 16=semicorchea 32=fusa.
+
+# Rejilla RECTA (por defecto): semicorcheas, 16 slots/compás (4/4).
+_DURATIONS_STRAIGHT = [
+    (16, 1, False, None),   # redonda
+    (12, 2, True, None),    # blanca con puntillo
+    (8, 2, False, None),    # blanca
+    (6, 4, True, None),     # negra con puntillo
+    (4, 4, False, None),    # negra
+    (3, 8, True, None),     # corchea con puntillo
+    (2, 8, False, None),    # corchea
+    (1, 16, False, None),   # semicorchea
 ]
-SLOTS_PER_MEASURE = 16   # 4/4 con rejilla de semicorcheas
+
+# Rejilla con TRESILLOS (opt-in): 48 slots/compás (12/beat) -> soporta rectas Y tresillos.
+# El galope del metal (The Trooper) son tresillos de corchea (4 slots).
+_DURATIONS_TRIPLET = [
+    (48, 1, False, None),       # redonda
+    (36, 2, True, None),        # blanca con puntillo
+    (24, 2, False, None),       # blanca
+    (18, 4, True, None),        # negra con puntillo
+    (16, 2, False, (3, 2)),     # tresillo de blanca
+    (12, 4, False, None),       # negra
+    (9, 8, True, None),         # corchea con puntillo
+    (8, 4, False, (3, 2)),      # tresillo de negra
+    (6, 8, False, None),        # corchea
+    (4, 8, False, (3, 2)),      # tresillo de corchea (GALOPE)
+    (3, 16, False, None),       # semicorchea
+    (2, 16, False, (3, 2)),     # tresillo de semicorchea
+    (1, 32, False, None),       # fusa (resto)
+]
+
+_GRID_STRAIGHT = {"slots_per_measure": 16, "subdiv": 4, "durations": _DURATIONS_STRAIGHT}
+_GRID_TRIPLET = {"slots_per_measure": 48, "subdiv": 12, "durations": _DURATIONS_TRIPLET}
 
 _EXT_TO_VERSION = {
     ".gp3": (3, 0, 0),
@@ -36,30 +58,32 @@ _EXT_TO_VERSION = {
 }
 
 
-def _largest_fit(slots: int, cap: int) -> tuple[int, int, bool]:
-    """Mayor duracion representable que cabe en min(slots, cap)."""
+def _largest_fit(slots: int, cap: int, durations=_DURATIONS_STRAIGHT):
+    """Mayor duracion representable que cabe en min(slots, cap). -> (slots,value,dotted,tuplet)."""
     limit = min(slots, cap)
-    for s, value, dotted in _DURATIONS:
+    for s, value, dotted, tup in durations:
         if s <= limit:
-            return s, value, dotted
-    return 1, 16, False
+            return s, value, dotted, tup
+    return 1, durations[-1][1], False, None
 
 
-def _decompose(slots: int, cap: int) -> list[tuple[int, bool]]:
-    """Descompone una duracion (en slots) en una lista de (valor, puntillo)."""
+def _decompose(slots: int, cap: int, durations=_DURATIONS_STRAIGHT):
+    """Descompone una duracion (en slots) en lista de (valor, puntillo, tuplet)."""
     out = []
     remaining = slots
     while remaining > 0:
-        s, value, dotted = _largest_fit(remaining, cap)
-        out.append((value, dotted))
+        s, value, dotted, tup = _largest_fit(remaining, cap, durations)
+        out.append((value, dotted, tup))
         remaining -= s
     return out
 
 
-def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote]):
+def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote], tuplet=None):
     """Crea un Beat con notas y sus respectivos efectos (Tiers 1, 2 y 3)."""
     beat = M.Beat(voice)
     beat.duration = M.Duration(value=value, isDotted=dotted)
+    if tuplet:
+        beat.duration.tuplet = M.Tuplet(enters=tuplet[0], times=tuplet[1])
     if tab_notes:
         beat.status = M.BeatStatus.normal
         # RNF-01 / Robustez: si hay varias notas en la misma cuerda en este beat cuantizado,
@@ -126,16 +150,29 @@ def _make_beat(voice, value: int, dotted: bool, tab_notes: list[TabNote]):
 _DEFAULT_GUITAR_TUNING = {1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 40}
 
 
-_SUBDIV = 4   # subdivisiones por beat (negra) -> rejilla de semicorcheas
-
-
-def _make_to_slot(beats, bpm: float):
-    """Devuelve una función onset_segundos -> slot (entero).
+def _make_to_slot(beats, bpm: float, subdiv: int = 4, straight_bias: float = 8.0):
+    """Devuelve una función onset_segundos -> slot (entero). `subdiv` = subdivisiones
+    por beat (4 = semicorcheas; 12 = soporta tresillos).
 
     Con `beats` (tiempos de beat reales del audio) cuantiza RELATIVO a los beats:
     corrige el desfase de fase (el grid fijo asume rejilla desde t=0) y sigue el
     pulso real. Sin beats, usa el grid fijo clásico a `bpm`.
+
+    En rejilla de tresillos (subdiv=12), `straight_bias` (>1) sesga el snap hacia la
+    rejilla recta de semicorcheas: solo asigna posición de tresillo si el onset está
+    claramente más cerca de ella (reduce falsos tresillos por jitter de onsets).
     """
+    step = 3 if subdiv == 12 else 1   # paso de la rejilla recta de 16ths dentro de subdiv
+
+    def snap(f: float) -> int:
+        if step == 1:
+            return int(round(f))
+        full = round(f)                      # rejilla completa (incluye tresillos)
+        straight = round(f / step) * step    # rejilla recta de semicorcheas
+        if abs(f - straight) <= abs(f - full) * straight_bias:
+            return int(straight)
+        return int(full)
+
     if beats is not None and len(beats) >= 2:
         import numpy as np
         idx = np.arange(len(beats), dtype=float)
@@ -143,16 +180,20 @@ def _make_to_slot(beats, bpm: float):
 
         def to_slot(t: float) -> int:
             bp = float(np.interp(t, beats, idx))   # posición en beats (clamp a extremos)
-            return int(round(bp * _SUBDIV))
+            return snap(bp * subdiv)
         return to_slot
 
-    grid = (60.0 / bpm) / 4.0
-    return lambda t: int(round(t / grid))
+    grid = (60.0 / bpm) / subdiv
+    return lambda t: snap(t / grid)
 
 
-def _track_layout(tab_notes: list[TabNote], to_slot):
+def _track_layout(tab_notes: list[TabNote], to_slot, to_slot_end=None, prefer_gap=False):
     """Agrupa las notas de una pista por slot de onset y calcula su duración en
-    slots. Devuelve (events, ev_dur, sorted_slots)."""
+    slots. `to_slot` (sesgado) ubica el onset; `to_slot_end` (sin sesgo) cuantiza el
+    fin. `prefer_gap=True` (modo tresillos): la duración = brecha entre onsets
+    (inter-onset), que sigue la rejilla fiable de onsets y evita falsos tresillos por
+    notas staccato; las notas se sostienen hasta el siguiente onset."""
+    to_slot_end = to_slot_end or to_slot
     events: dict[int, list[TabNote]] = {}
     for tn in tab_notes:
         slot = to_slot(tn.start)
@@ -162,10 +203,16 @@ def _track_layout(tab_notes: list[TabNote], to_slot):
     ev_dur: dict[int, int] = {}
     for idx, slot in enumerate(sorted_slots):
         notes = events[slot]
-        end_slot = max((to_slot(tn.end) for tn in notes), default=slot + 1) if notes else slot + 1
-        dur = max(1, end_slot - slot)
-        if idx + 1 < len(sorted_slots):
-            dur = min(dur, sorted_slots[idx + 1] - slot)
+        has_next = idx + 1 < len(sorted_slots)
+        gap = sorted_slots[idx + 1] - slot if has_next else None
+        end_slot = max((to_slot_end(tn.end) for tn in notes), default=slot + 1) if notes else slot + 1
+        end_dur = max(1, end_slot - slot)
+        if prefer_gap and has_next:
+            dur = gap
+        elif has_next:
+            dur = min(end_dur, gap)
+        else:
+            dur = end_dur
         ev_dur[slot] = max(1, dur)
     return events, ev_dur, sorted_slots
 
@@ -177,30 +224,33 @@ def _total_slots(ev_dur, sorted_slots) -> int:
     return last + ev_dur[last]
 
 
-def _fill_track_measures(track, headers, events, ev_dur, sorted_slots, n_measures):
+def _fill_track_measures(track, headers, events, ev_dur, sorted_slots, n_measures,
+                         grid=_GRID_STRAIGHT):
     """Rellena track.measures con beats/silencios cuantizados, hasta n_measures."""
+    spm = grid["slots_per_measure"]
+    durs = grid["durations"]
     track.measures = []
     for mi in range(n_measures):
         measure = M.Measure(track, headers[mi])
         voice = measure.voices[0]
         voice.beats = []
 
-        m_start = mi * SLOTS_PER_MEASURE
-        m_end = m_start + SLOTS_PER_MEASURE
+        m_start = mi * spm
+        m_end = m_start + spm
         t = m_start
         while t < m_end:
             if t in events:
                 notes = events[t]
                 cap = m_end - t
-                s, value, dotted = _largest_fit(ev_dur[t], cap)
-                voice.beats.append(_make_beat(voice, value, dotted, notes))
+                s, value, dotted, tup = _largest_fit(ev_dur[t], cap, durs)
+                voice.beats.append(_make_beat(voice, value, dotted, notes, tup))
                 t += s
             else:
                 next_slots = [s for s in sorted_slots if m_start <= s < m_end and s > t]
                 gap_end = min(next_slots) if next_slots else m_end
                 gap = gap_end - t
-                for value, dotted in _decompose(gap, m_end - t):
-                    voice.beats.append(_make_beat(voice, value, dotted, []))
+                for value, dotted, tup in _decompose(gap, m_end - t, durs):
+                    voice.beats.append(_make_beat(voice, value, dotted, [], tup))
                 t = gap_end
 
         if not voice.beats:   # compas vacio -> silencio de redonda
@@ -243,7 +293,8 @@ def _write_tempo_map(song: M.Song, beats, base_bpm: float) -> None:
 
 
 def build_multitrack_song(instruments: list[dict], bpm: float = 120.0,
-                          title: str = "Audio2Tab", beats=None) -> M.Song:
+                          title: str = "Audio2Tab", beats=None,
+                          triplets: bool = False) -> M.Song:
     """Construye un Song con una pista por instrumento.
 
     `instruments`: lista de dicts {name, tuning, tab_notes, capo?, midi_program?}.
@@ -251,21 +302,29 @@ def build_multitrack_song(instruments: list[dict], bpm: float = 120.0,
     rellenan con silencios hasta el número de compases de la más larga.
     `beats`: tiempos de beat reales del audio (opcional) para cuantización
     relativa a beats + mapa de tempo dinámico.
+    `triplets`: si True usa rejilla de 48 slots/compás con soporte de tresillos
+    (galope del metal); si False, rejilla recta de semicorcheas (por defecto).
     """
+    grid = _GRID_TRIPLET if triplets else _GRID_STRAIGHT
+    spm = grid["slots_per_measure"]
     song = M.Song()
     song.title = title
     song.artist = "Audio2Tab"
     song.tempo = int(round(bpm))
     template_ts = song.measureHeaders[0].timeSignature
-    to_slot = _make_to_slot(beats, bpm)
+    to_slot = _make_to_slot(beats, bpm, grid["subdiv"])                  # onset (sesgado)
+    # Fin: forzado a la rejilla recta — la señal de tresillo es la brecha entre onsets,
+    # no la duración de una nota suelta (evita falsos tresillos en la última nota/staccato).
+    to_slot_end = _make_to_slot(beats, bpm, grid["subdiv"], straight_bias=1000.0)
 
     layouts = []
     max_total = 0
     for inst in instruments:
-        ev, evd, ss = _track_layout(inst["tab_notes"], to_slot)
+        ev, evd, ss = _track_layout(inst["tab_notes"], to_slot, to_slot_end,
+                                    prefer_gap=triplets)
         layouts.append((ev, evd, ss))
         max_total = max(max_total, _total_slots(evd, ss))
-    n_measures = max(1, math.ceil(max_total / SLOTS_PER_MEASURE)) if max_total else 1
+    n_measures = max(1, math.ceil(max_total / spm)) if max_total else 1
 
     song.measureHeaders = []
     for mi in range(n_measures):
@@ -295,7 +354,7 @@ def build_multitrack_song(instruments: list[dict], bpm: float = 120.0,
                     track.channel.instrument = int(inst["midi_program"])
                 except Exception:
                     pass
-        _fill_track_measures(track, song.measureHeaders, ev, evd, ss, n_measures)
+        _fill_track_measures(track, song.measureHeaders, ev, evd, ss, n_measures, grid)
         song.tracks.append(track)
 
     _write_tempo_map(song, beats, bpm)
@@ -303,30 +362,34 @@ def build_multitrack_song(instruments: list[dict], bpm: float = 120.0,
 
 
 def build_song(tab_notes: list[TabNote], bpm: float = 120.0, title: str = "Audio2Tab",
-               tuning: dict[int, int] | None = None, capo: int = 0) -> M.Song:
+               tuning: dict[int, int] | None = None, capo: int = 0,
+               triplets: bool = False) -> M.Song:
     """Compatibilidad single-track: delega en build_multitrack_song."""
     return build_multitrack_song(
         [{"name": "Guitar", "tuning": tuning or _DEFAULT_GUITAR_TUNING,
           "tab_notes": tab_notes, "capo": capo}],
-        bpm=bpm, title=title)
+        bpm=bpm, title=title, triplets=triplets)
 
 
 def write_gp(tab_notes: list[TabNote], out_path: str, bpm: float = 120.0,
              title: str = "Audio2Tab", tuning: dict[int, int] | None = None,
-             capo: int = 0) -> str:
+             capo: int = 0, triplets: bool = False) -> str:
     ext = os.path.splitext(out_path)[1].lower()
     if ext not in _EXT_TO_VERSION:
         raise ValueError(f"Formato no soportado: {ext} (usa .gp5/.gp4/.gp3)")
-    song = build_song(tab_notes, bpm=bpm, title=title, tuning=tuning, capo=capo)
+    song = build_song(tab_notes, bpm=bpm, title=title, tuning=tuning, capo=capo,
+                      triplets=triplets)
     gp.write(song, out_path, version=_EXT_TO_VERSION[ext])
     return out_path
 
 
 def write_multitrack_gp(instruments: list[dict], out_path: str, bpm: float = 120.0,
-                        title: str = "Audio2Tab", beats=None) -> str:
+                        title: str = "Audio2Tab", beats=None,
+                        triplets: bool = False) -> str:
     ext = os.path.splitext(out_path)[1].lower()
     if ext not in _EXT_TO_VERSION:
         raise ValueError(f"Formato no soportado: {ext} (usa .gp5/.gp4/.gp3)")
-    song = build_multitrack_song(instruments, bpm=bpm, title=title, beats=beats)
+    song = build_multitrack_song(instruments, bpm=bpm, title=title, beats=beats,
+                                 triplets=triplets)
     gp.write(song, out_path, version=_EXT_TO_VERSION[ext])
     return out_path

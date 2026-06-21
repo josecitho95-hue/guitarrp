@@ -116,6 +116,44 @@ def test_make_to_slot_beats_vs_grid():
     assert grid_slot(0.5) == 4
 
 
+# --- Cuantización con tresillos (galope) ---
+
+def _gtr(notes):
+    return [{"name": "G", "tuning": to_tab.STANDARD_TUNING, "tab_notes": notes}]
+
+
+def test_triplets_detected_in_triplet_mode():
+    # 3 tresillos de corchea por beat a 120 BPM (beat=0.5s -> 0.1667s c/u).
+    notes = []
+    for beat in range(4):
+        for k in range(3):
+            t = beat * 0.5 + k * (0.5 / 3)
+            notes.append(TabNote(pitch=60, start=t, end=t + 0.15, string=2, fret=1))
+    song = to_gp.build_multitrack_song(_gtr(notes), bpm=120, triplets=True)
+    n_trip = sum(1 for m in song.tracks[0].measures for v in m.voices for b in v.beats
+                 if b.duration.tuplet and b.duration.tuplet.enters == 3)
+    assert n_trip >= 9                                  # la mayoría de los 12 son tresillos
+
+
+def test_straight_stays_straight_in_triplet_mode():
+    # 16ths rectas a 120 BPM (0.125s c/u) -> el sesgo evita falsos tresillos.
+    notes = [TabNote(pitch=60, start=i * 0.125, end=i * 0.125 + 0.1, string=2, fret=1)
+             for i in range(8)]
+    song = to_gp.build_multitrack_song(_gtr(notes), bpm=120, triplets=True)
+    n_trip = sum(1 for m in song.tracks[0].measures for v in m.voices for b in v.beats
+                 if b.duration.tuplet and b.duration.tuplet.enters == 3)
+    assert n_trip == 0
+
+
+def test_no_tuplets_in_straight_mode():
+    notes = [TabNote(pitch=60, start=i * (0.5 / 3), end=i * (0.5 / 3) + 0.1, string=2, fret=1)
+             for i in range(6)]
+    song = to_gp.build_multitrack_song(_gtr(notes), bpm=120, triplets=False)
+    n_trip = sum(1 for m in song.tracks[0].measures for v in m.voices for b in v.beats
+                 if b.duration.tuplet and b.duration.tuplet.enters == 3)
+    assert n_trip == 0
+
+
 # --- Matriz de inhibición aprendida ---
 
 def test_learned_inhibition_penalizes_rare_positions():

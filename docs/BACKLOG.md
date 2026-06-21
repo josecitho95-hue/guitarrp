@@ -166,15 +166,16 @@ traste-medio no separa Eb de estándar). Posible vía futura: probar candidatas 
 idiomática + contexto, o pedir al usuario (la sabe del tab oficial). 🟢
 
 ### Notación rítmica (🟠 patrón clave del metal)
-**RHY-01 — Cuantización de tresillos / galope.** *Etapa 5 (to_gp).* Nuestra cuantización es a
-semicorcheas (rejilla de 16/compás) y **no puede representar tresillos**. Medido en The Trooper
-(Iron Maiden): el oficial usa **606 tresillos (3:2) = 21% de los beats de guitarra** (el galope
-"da-da-dum"), omnipresente en NWOBHM/thrash. Sin tresillos el tab se ve mal para cualquier
-guitarrista. *Solución:* rejilla de 48/compás (12 subdiv/beat soporta 16ths Y tresillos),
-detección y emisión de tuplets GP (`beat.duration.tuplet`). *Impacto:* 🟠 medio-alto — toca la
-cuantización de `to_gp` (afecta todas las canciones + `structure.py` + tests → validar regresión).
-Mejora sobre todo la NOTACIÓN (el DTW podría no moverse: los errores de tiempo de tresillo son
-sub-ventana). Considerar opt-in (`--triplets`) para evitar regresión. *Hallazgo: sesión 21 jun.*
+**RHY-01 — Cuantización de tresillos / galope.** ✅ *HECHO (opt-in `--triplets`).* La cuantización
+recta a semicorcheas no representaba tresillos; The Trooper usa **606 tresillos (3:2) = 21%** del
+oficial (el galope). *Implementado:* rejilla de 48/compás (12 subdiv/beat) con tuplets GP
+(`beat.duration.tuplet`), **opt-in** (default = rejilla recta, cero regresión). Claves del fix
+(`to_gp`): (a) **sesgo hacia recto** (`straight_bias=8`) en el snap de onset → solo tresillo si el
+onset está casi exacto (evita falsos por jitter); (b) **fin forzado a recto** + **duración = brecha
+entre onsets** (la señal de tresillo es el onset, no la duración de nota suelta). Resultado en
+Trooper: **569 tresillos en las 2 guitarras (vs 606 oficial, 94%)**; DTW sin cambio (chroma es
+invariante al ritmo); modo recto idéntico (Back in Black 77.9% sin regresión). 33 tests verdes
+(+3 nuevos). *Hecho: sesión 21 jun.*
 
 ### Priors de dominio correcto (🟡 arregla el desajuste GuitarSet→metal)
 **MG-02 — Matriz de inhibición desde DadaGP-metal.** Reconstruir `models/inhibition.npz` (ver
