@@ -54,9 +54,9 @@ def lowest_string(song) -> str:
     return "?"
 
 
-def run_one(name, audio, gp_path, device, mono):
+def run_one(name, audio, gp_path, device, mono, ref_tracks_override=None):
     ref_song = gp.parse(gp_path)
-    ref_tracks = parse_tracks("", ref_song)
+    ref_tracks = ref_tracks_override if ref_tracks_override else parse_tracks("", ref_song)
     ref_notes = extract_notes(ref_song, ref_tracks)
 
     params = PipelineParams(
@@ -95,11 +95,20 @@ def main():
         return 1
     print(f"{len(pairs)} canciones encontradas.\n")
 
+    # Config opcional: corpus.json en la carpeta, {basename: [indices pistas guitarra]}.
+    import json
+    cfg_path = os.path.join(args.corpus, "corpus.json")
+    cfg = {}
+    if os.path.exists(cfg_path):
+        with open(cfg_path, encoding="utf-8") as f:
+            cfg = json.load(f)
+
     rows = []
     for name, audio, gp_path in pairs:
         print(f"=== {name} ===", flush=True)
         try:
-            r = run_one(name, audio, gp_path, args.device, args.mono)
+            r = run_one(name, audio, gp_path, args.device, args.mono,
+                        ref_tracks_override=cfg.get(name))
             rows.append(r)
             print(f"  tuning={r['tuning']} bpm={r['bpm']} | DTW={r['dtw']}% "
                   f"contenido={r['content']}% (ref {r['ref_notes']} / est {r['est_notes']})")

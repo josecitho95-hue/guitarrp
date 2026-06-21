@@ -56,13 +56,17 @@ No necesarias para el MVP; se consideran en futuras sesiones.
 **CH-02 — Mapa de tempo dinámico (vs. BPM estático)** — ⚠️ *PROBADO, SIN MEJORA con `librosa`*
 *Etapa 5 (Tab → Guitar Pro).* Piezas con rubato, acelerando/desacelerando (clásico, solos
 expresivos) no mantienen un BPM robótico. Asumir un BPM global (F5) desalinea los compases.
-*Estado (2026-06-20):* la **infraestructura está implementada y mergeada, apagada por defecto**
+*Estado (2026-06-21):* la **infraestructura está implementada y mergeada, apagada por defecto**
 (`preprocess.estimate_beats`, `to_gp._make_to_slot`/`_write_tempo_map`, `beats=None` → grid fijo).
-Medido sobre Master of Puppets: **DTW 76.0 vs 76.2 → no mejora**, porque `librosa` no da tempo
-dinámico real (pulso ~constante; no captura secciones lentas) y el cuello de botella resultó ser
-la precisión de notas, no el ritmo. **Solo se reactivaría con un beat-tracker dinámico real
-(`madmom`, no instalado/frágil en Windows).** No re-intentar con librosa.
-*Impacto:* 🟠 medio (ya hecho); reactivación requiere `madmom`.
+Medido sobre MoP (chroma 76.0 vs 76.2) **y sobre Back in Black con beats del stem de batería**
+(ventana 46.8% grid fijo vs 42-45% beat-relativo) → **no mejora, incluso empeora**. **Causa
+identificada:** el beat-tracker de `librosa` no es lo bastante exacto (jitter de ms) → cuantizar
+contra sus beats es peor que una rejilla matemática limpia para tempo estable (la mayoría de la
+música). El enfoque es correcto (validado por experto externo); el cuello de botella es la
+**exactitud del beat-tracker**. **Desbloqueo real: `madmom`** (beat/downbeat tracking preciso) →
+serviría para canciones que ACELERAN (Stairway, outro de SCO). Riesgo: madmom frágil en Windows →
+instalar en entorno aislado. No re-intentar con librosa.
+*Impacto:* 🟠 medio (infra hecha); reactivación = integrar madmom + evaluar legibilidad (no chroma).
 
 ### 2. Casos extremos en la matriz de inhibición
 

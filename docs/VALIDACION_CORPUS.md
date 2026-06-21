@@ -76,15 +76,45 @@ Validado en MoP: `tuning=Mi(40) bpm=207 DTW=82.8% contenido=99.2%`.
 
 ---
 
-## 4. Qué buscamos confirmar (hipótesis)
+## 4. Resultados medidos (21 jun 2026) — 6 canciones, 6 estilos
 
-1. **El estéreo ayuda en proporción al paneo** (mucho en Maiden/thrash clásico; poco en
-   djent moderno centrado).
-2. **La auto-detección de afinación/BPM** acierta en drop tunings y 7-8 cuerdas.
-3. **El techo ~84%** se sostiene en thrash y se mueve predeciblemente con la densidad y la
-   calidad de la mezcla (peor en black metal lo-fi, mejor en producción limpia).
-4. **Géneros menos cromáticos/densos** (doom clásico, hard rock) deberían dar **mejor** DTW
-   que el metal denso → confirmaría que el techo es del material, no del pipeline.
+Cada canción `<base>.mp3` + `<base>.gp3` en `storage/corpus/` con un `corpus.json` que mapea
+`{base: [pistas de guitarra del oficial]}` (la auto-detección por nombre falla en tabs sin
+nombrar/con pistas de cuerda no-guitarra).
 
-> Cuando tengamos 5-8 canciones medidas, sabremos si generalizamos o si hay que ajustar por
-> subgénero (p.ej. activar la matriz DadaGP-metal o la inhibición según el material).
+| Canción | Estilo | Afinación | DTW | Ventana | Contenido | Lever de notación |
+|---------|--------|-----------|-----|---------|-----------|-------------------|
+| Stairway to Heaven | Acústico/limpio | E | **84.5%** | **58%** | 99.4% | — (caso de éxito) |
+| Master of Puppets | Thrash | E | 84% | — | 99% | (estéreo) |
+| Sweet Child O' Mine | Rock | **Eb** | 79% | 49% | 98.6% | afinación Eb |
+| Back in Black | Hard rock | E | 78% | 46% | 98.7% | tempo (half-time) |
+| Killing in the Name | Funk-metal | **Drop D** | 72% | 41% | **99.6%** | Drop D + tempo inverso |
+| The Trooper | NWOBHM gallop | E | 70% | 52% | 98.1% | tresillos (RHY-01) |
+
+**Conclusiones (confirmadas con datos):**
+1. **El contenido es siempre 98-99.6%** — el pipeline capta las notas correctas en TODO género.
+2. **El DTW sube con material limpio/simple** (Stairway 84.5%, Killing-contenido 99.6%) y **baja
+   con complejidad rítmica** (gallop/tresillos) o **mismatch de fuente** (tabs oficiales de versión
+   más larga/condensada que el MP3). → **El techo lo marca el MATERIAL, no el pipeline.** Hipótesis
+   confirmada.
+3. **El estéreo SÍ aporta en harmonías reales** (The Trooper: 1 guitarra 66.6% → 2 guitarras 70.3%).
+4. **Cada estilo reveló un lever de NOTACIÓN** (no de contenido). Entregados: tempo (PR #11),
+   afinaciones Eb/D/Drop D/Drop C (PR #12). Pendiente: tresillos (RHY-01).
+5. **La afinación NO se auto-detecta** de forma fiable desde audio (mismas alturas); selección
+   manual `--tuning`. El **tempo** tiene ambigüedad de octava (BiB se sobre-doblaba, Killing se
+   sobre-detecta a 172 vs 80) → `--bpm` override.
+
+## 5. Sobre cuantización rítmica / mapa de tempo (análisis de tips externos)
+
+Toda la maquinaria del "flujo profesional" (beat tracking + cuantización **relativa a beats** +
+mapa de tempo dinámico) **ya está construida** (`preprocess.estimate_beats`,
+`to_gp._make_to_slot`, `to_gp._write_tempo_map`) pero **apagada por defecto**. Medido (incluyendo
+beats del **stem de batería**, no solo de la mezcla): en Back in Black el grid fijo gana (ventana
+46.8%) y el beat-relativo empeora (42-45%).
+
+**Causa:** el beat-tracker de **librosa no es lo bastante exacto** (jitter de ms) → cuantizar contra
+sus beats es peor que una rejilla matemática limpia para tempo estable (la mayoría). El cuello de
+botella es la **exactitud del beat-tracker**, no el enfoque. **Upgrade real: `madmom`** (beat/
+downbeat tracking preciso) → desbloquearía el beat-relativo + mapa de tempo para canciones que
+**aceleran** (Stairway, outro de SCO). Ver **CH-02**. El otro lever de notación rítmica es **RHY-01
+(tresillos)**.
