@@ -195,6 +195,14 @@ instancias**. Combina lo que funciona (detección) con el lever real (revisión 
 detección alimenta el etiquetado de secciones (LLM-01) y mostrar estructura en el visor.
 **Top recomendado actual.** Cimiento Python (`structure.py`) contenido; consumo UI después. 🟡
 
+### Validación (🟢 robustez cross-género)
+**VAL-01 — Probar más artistas/géneros de metal.** Solo validamos MoP. Harness listo
+(`scripts/validate_corpus.py`): coloca pares (audio + tab oficial de **mySongBook**) en una
+carpeta → reporta afinación/BPM/DTW/contenido por canción + media. Set de prueba recomendado
+y metodología en [`VALIDACION_CORPUS.md`](VALIDACION_CORPUS.md). Hipótesis a confirmar: el
+estéreo ayuda en proporción al paneo; el techo ~84% se mueve con densidad/calidad de mezcla.
+**El usuario aporta los pares** (audio propio + tab oficial; copyright). 🟢
+
 ### Creativas / exploratorias (🟣)
 **CR-01 — Huella de estilo de ejecución** (densidad palm-mute, tipo de vibrato).
 **CR-02 — Estimación de dificultad + modo práctica** (pistas ralentizadas por sección).
