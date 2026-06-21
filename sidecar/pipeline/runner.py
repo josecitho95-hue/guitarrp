@@ -33,6 +33,7 @@ class PipelineParams:
     from_midi: bool = False
     multi_instrument: bool = False    # guitarra + bajo en pistas separadas (requiere separate)
     stereo_guitars: bool = False      # 2 guitarras paneadas L/R (requiere multi_instrument)
+    include_vocals: bool = False      # pista de melodía vocal (requiere multi_instrument)
 
 
 def _stem_to_tab(stem_wav: str, params: PipelineParams, tuning: dict,
@@ -152,8 +153,18 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
                     drums_only=True, progress=_drum_prog)
                 drum_tab = to_tab.assign_drums(drum_notes)
 
+            # Voz: línea melódica monofónica (opt-in; transcripción más ruidosa).
+            vocal_tab = []
+            if params.include_vocals and "vocals" in stems:
+                vnotes = transcribe.transcribe_audio(
+                    stems["vocals"], onset_threshold=0.6, min_note_length_ms=120,
+                    min_freq=100.0, max_freq=1100.0)
+                vnotes = transcribe.monophonic_cleanup(vnotes)
+                vocal_tab = to_tab.assign_tab(vnotes, tuning=to_tab.STANDARD_TUNING,
+                                              open_string_pref=params.open_string_pref)
+
             guitar_total = sum(len(g["tab_notes"]) for g in guitar_insts)
-            if not guitar_total and not bass_tab and not drum_tab:
+            if not guitar_total and not bass_tab and not drum_tab and not vocal_tab:
                 raise RuntimeError("No se detectaron notas en el audio.")
 
             prog("tabbing", 0.8)
@@ -163,10 +174,13 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
             if drum_tab:
                 instruments.append({"name": "Drums", "tab_notes": drum_tab,
                                     "percussion": True})
+            if vocal_tab:
+                instruments.append({"name": "Vocals", "tuning": to_tab.STANDARD_TUNING,
+                                    "tab_notes": vocal_tab, "midi_program": 52})
             to_gp.write_multitrack_gp(instruments, out_path, bpm=bpm, title=title)
             _save_tab_json(work_dir, guitar_insts[0]["tab_notes"])
             prog("done", 1.0)
-            n_total = guitar_total + len(bass_tab) + len(drum_tab)
+            n_total = guitar_total + len(bass_tab) + len(drum_tab) + len(vocal_tab)
             return {"output": out_path, "n_tab": n_total, "n_notes": n_total,
                     "bpm": round(bpm, 1), "tracks": [i["name"] for i in instruments]}
 

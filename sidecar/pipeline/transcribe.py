@@ -38,6 +38,27 @@ def notes_from_midi_file(path: str) -> list[Note]:
     return notes_from_pretty_midi(pretty_midi.PrettyMIDI(path))
 
 
+def monophonic_cleanup(notes: list[Note], win: float = 0.08) -> list[Note]:
+    """Reduce a una línea melódica: una nota por ventana de onset (la más larga/
+    fuerte), recortando solapes. Útil para voz/melodía monofónica, donde
+    basic_pitch genera notas espurias simultáneas por vibrato/formantes."""
+    if not notes:
+        return []
+    notes = sorted(notes, key=lambda n: n.start)
+    out: list[Note] = []
+    i = 0
+    while i < len(notes):
+        j = i
+        while j < len(notes) and notes[j].start - notes[i].start <= win:
+            j += 1
+        out.append(max(notes[i:j], key=lambda n: (n.end - n.start, n.velocity)))
+        i = j
+    for k in range(len(out) - 1):
+        if out[k].end > out[k + 1].start:
+            out[k].end = out[k + 1].start
+    return out
+
+
 def _basic_pitch_model():
     """Prefiere el modelo ONNX (evita TensorFlow y el conflicto de protobuf)."""
     from basic_pitch import ICASSP_2022_MODEL_PATH

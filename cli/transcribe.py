@@ -46,7 +46,7 @@ def run(args: argparse.Namespace) -> int:
         tuning=args.tuning, capo=args.capo,
         onset_threshold=args.onset_threshold, min_note_ms=args.min_note_ms,
         from_midi=args.from_midi, multi_instrument=args.multi_instrument,
-        stereo_guitars=args.stereo_guitars,
+        stereo_guitars=args.stereo_guitars, include_vocals=args.vocals,
     )
 
     try:
@@ -75,6 +75,8 @@ def main() -> int:
                     help="Guitarra + bajo en pistas separadas (requiere --separate)")
     ap.add_argument("--stereo-guitars", action="store_true",
                     help="2 guitarras paneadas L/R (requiere --multi-instrument)")
+    ap.add_argument("--vocals", action="store_true",
+                    help="Añade pista de melodía vocal (requiere --multi-instrument)")
     ap.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="Dispositivo Demucs")
     ap.add_argument("--bpm", type=float, default=None,
                     help="Tempo manual; si se omite, se detecta automaticamente")

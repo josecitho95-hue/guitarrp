@@ -7,17 +7,17 @@ etapa/componente del pipeline afectado.
 
 ## Prioridad alta — Calidad (lever de fidelidad)
 
-**MG-01 — Modelo de transcripción específico de guitarra** 🎯
+**MG-01 — Modelo de transcripción específico de guitarra** ⛔ *PARQUEADO (sin pesos públicos)*
 *Etapa 3 (Audio→MIDI).* Hoy usamos `basic_pitch` (~0.73 F1, genérico) y `mr_mt3` (multi-
-instrumento, sobre-transcribe en mezcla densa). Ninguno está entrenado en guitarra. El
-contenido global ya es ~99%, pero la fidelidad nota-a-nota tiene techo.
-*Solución:* integrar un modelo específico de guitarra (candidato: **High-Resolution Guitar
-Transcription**, ~0.88 F1 GuitarSet; alternativa **FretNet**) detrás de la misma firma
-`list[Note]`. **Documento de implementación completo: [`MODELO_GUITARRA.md`](MODELO_GUITARRA.md)**
-(contrato, pasos, validación, riesgos, criterios de aceptación).
-*Impacto:* 🟠 medio-alto esfuerzo (conseguir/portar pesos), pero **aislado a la etapa 3**:
-nada de aguas abajo (inhibición, tab, técnicas, GP, estéreo, multipista) requiere cambios.
-Es el **único lever de fidelidad que queda** tras agotar el resto (ver nota de cierre).
+instrumento, sobre-transcribe en mezcla densa). Ninguno está entrenado en guitarra.
+*Estado (2026-06-20):* **BLOQUEADO.** Verificado que ningún modelo SOTA de guitarra (High-Res,
+FretNet, robustez-eléctrica) publica pesos de inferencia — todos exigen entrenar, lo que
+contradice la política "no entrenar". Omnizart tiene pesos pero es genérico + TF viejo. Para
+mezcla densa el valor esperado es bajo (baseline estéreo DTW ~84% ≈ techo práctico).
+**Detalle y plan de reactivación: [`MODELO_GUITARRA.md`](MODELO_GUITARRA.md).**
+*Reactivar si:* aparece un modelo con pesos descargables, o se acepta entrenar (FretNet/TabCNN
+en GuitarSet, factible en la 4070 pero retorno incierto en metal). La fontanería del pipeline
+está lista (aislado a etapa 3 detrás de `list[Note]`).
 
 ---
 
