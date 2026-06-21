@@ -52,6 +52,24 @@ def _stem_to_tab(stem_wav: str, params: PipelineParams, tuning: dict,
     return techniques.detect_techniques(tab)
 
 
+def _save_structure(work_dir: str, tab, audio_path: str, bpm: float) -> int:
+    """Detecta riffs repetidos (structure.py) y guarda structure.json. Cimiento de
+    UX-04 (propagar correcciones a repeticiones) + etiquetado de secciones. No es
+    crítico: si falla, no rompe el pipeline."""
+    try:
+        import json
+
+        from . import structure
+        beats, _ = preprocess.estimate_beats(audio_path, target_bpm=bpm)
+        st = structure.detect_structure(tab, beats)
+        with open(os.path.join(work_dir, "structure.json"), "w", encoding="utf-8") as f:
+            json.dump(st, f, indent=2)
+        return st.get("n_repeated_clusters", 0)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[structure] omitido: {exc}", flush=True)
+        return 0
+
+
 def _save_tab_json(work_dir: str, tab) -> None:
     import json
     data = [
@@ -179,6 +197,7 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
                                     "tab_notes": vocal_tab, "midi_program": 52})
             to_gp.write_multitrack_gp(instruments, out_path, bpm=bpm, title=title)
             _save_tab_json(work_dir, guitar_insts[0]["tab_notes"])
+            _save_structure(work_dir, guitar_insts[0]["tab_notes"], wav, bpm)
             prog("done", 1.0)
             n_total = guitar_total + len(bass_tab) + len(drum_tab) + len(vocal_tab)
             return {"output": out_path, "n_tab": n_total, "n_notes": n_total,
@@ -217,6 +236,8 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
     out_path = os.path.splitext(out_path)[0] + "." + params.output_format.lstrip(".")
     to_gp.write_gp(tab, out_path, bpm=bpm, title=title, tuning=tuning_dict, capo=params.capo)
     _save_tab_json(work_dir, tab)
+    if not params.from_midi:
+        _save_structure(work_dir, tab, wav, bpm)
 
     prog("done", 1.0)
     return {"output": out_path, "n_notes": len(notes), "n_tab": len(tab), "bpm": round(bpm, 1)}
