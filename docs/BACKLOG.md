@@ -125,6 +125,69 @@ Puppets y se probaron levers de calidad con datos (todo mergeado a `main`):
   techo de información del estéreo (2 canales → 2 guitarras, ambas extraídas).
 
 **Conclusión:** el objetivo ("borrador editable multipista de alta calidad") está cumplido. El
-único lever de fidelidad pendiente es **MG-01** (modelo específico de guitarra). El test
-`test_techniques_bend_and_vibrato` falla por estar desactualizado vs el código endurecido
-(commit f116d96), no es un bug del pipeline.
+test `test_techniques_bend_and_vibrato` se corrigió (bend realista ≥3 puntos); suite en 28 verdes.
+
+---
+
+## Propuestas de mejora — investigación web/literatura (2026-06-20)
+
+Survey de foros, papers recientes y herramientas. **Hallazgo meta:** la literatura valida nuestra
+arquitectura (TART, arXiv 2510.02597, es un pipeline audio→tab de 4 etapas idéntico) y explica
+nuestros fracasos: todos los modelos buenos usan **DadaGP (incluye metal)**, no GuitarSet (acústico).
+Las herramientas comerciales **no separan instrumentos** → nuestro Demucs+estéreo va por delante.
+
+**Referencias clave:** TART (2510.02597) · MIDI-to-Tab/BART (2408.05024) · Fretting-Transformer
+(2506.14223) · DadaGP corpus 26k tabs (2107.14653, github.com/dada-bots/dadaGP, MIT, acceso por
+solicitud) · snap-to-scale (Scaler Detector) · ACR con LLM (2509.18700).
+
+### Limpieza con teoría musical (🟢 barato, sin entrenar, medible) — RECOMENDADO empezar aquí
+**TC-01 — Snap-to-scale / detección de tonalidad.** *Etapa 4c/5.* Detectar tonalidad
+(Krumhansl-Schmuckler en `librosa`) y corregir/marcar notas fuera de escala como errores probables
+de basic_pitch. Feature comercial real. Medible vs el oficial. **Top-1: barato y podría mover la
+aguja de verdad** (a diferencia del dedup de octavas). 🟢
+**TC-02 — Transcripción consciente de acordes.** Reconocer acorde por compás (ACR) y usarlo de
+prior: conservar tonos del acorde, degradar no-tonos. Limpia sobre-transcripción. 🟡
+**TC-03 — Auto-detección de afinación/drop tuning.** Detectar la grave consistente → sugerir Drop
+D/C/B (medio metal va downtuneado). Mejora digitación. Extiende SH-01. 🟢
+
+### Priors de dominio correcto (🟡 arregla el desajuste GuitarSet→metal)
+**MG-02 — Matriz de inhibición desde DadaGP-metal.** Reconstruir `models/inhibition.npz` (ver
+`scripts/build_inhibition.py`) desde tabs de **metal** (DadaGP o colección GP propia) en vez de
+GuitarSet acústico. El encoder de DadaGP es público (MIT). **No es entrenar, son estadísticas** de
+dominio correcto. Ataca directo el hallazgo de que GuitarSet no transfiere. 🟡
+**MG-03 — Fretting-Transformer / MIDI-to-Tab.** BART entrenado en DadaGP, "mejor jugabilidad y
+acuerdo que el software tradicional" (= mejor que nuestro DP+inhibición). Encaja en el contrato
+`list[Note]`/`TabNote`. **Parqueado hasta que liberen pesos** (mismo bloqueo que MG-01). 🟠
+
+### Post-proceso con LLM (🟠 el plan permite LLM accesorio vía OpenRouter)
+**LLM-01 — Etiquetado de secciones.** Nombrar Intro/Verso/Coro/Solo/Breakdown + marcadores de
+sección en el GP. Una llamada barata, muy útil para navegar. 🟢
+**LLM-02 — Pase "crítico musical".** Darle tab + contexto tonalidad/acordes; marca notas obviamente
+erróneas como **sugerencias HITL** (no auto-aplica). Arriesgado (alucinación). 🟠
+**LLM-03 — Simplificador de tabs.** Generar "versión fácil" (sin fantasmas, ritmos simplificados). 🟡
+
+### Ensemble y multi-pass (🟡)
+**EN-01 — Consenso de modelos.** Correr basic_pitch + mr_mt3 (ya rápido) y conservar notas en que
+**ambos coinciden**; marcar discrepancias. Reduce espurias. 🟡
+**EN-02 — Separación mid/side + por bandas.** Además de L/R, explotar canal *side* y sub-bandas para
+recuperar más fuentes (extiende el truco estéreo que SÍ funcionó). 🟡
+
+### HITL/UX — donde está el valor real (la auto-transcripción topa en ~84%) — RECOMENDADO
+**UX-01 — Mapa de calor de confianza en el visor.** basic_pitch emite fuerza de activación por nota
+→ colorear notas por confianza para arreglar primero lo peor. Convierte "84% preciso" en "aquí está
+el 16% a revisar". **Top-3: mayor multiplicador real de productividad.** Requiere propagar
+`confidence` en `Note` (≈ CH-03). 🟡
+**UX-02 — Diff audio-original vs synth.** Resaltar regiones donde el synth más diverge del original
+(= errores probables) para revisión dirigida. 🟡
+**UX-03 — Prior por recuperación de tabs.** Para canciones famosas, alinear/validar contra tab
+comunitaria existente (fallback a transcripción pura). 🟠
+
+### Creativas / exploratorias (🟣)
+**CR-01 — Huella de estilo de ejecución** (densidad palm-mute, tipo de vibrato).
+**CR-02 — Estimación de dificultad + modo práctica** (pistas ralentizadas por sección).
+**CR-03 — "Riff search"** (indexar riffs transcritos para encontrar canciones similares).
+
+> **Top-3 por impacto/esfuerzo:** TC-01 (snap-to-scale) · MG-02 (inhibición DadaGP-metal) ·
+> UX-01 (mapa de confianza). Patrón aprendido: lo que funciona es **añadir información real**
+> (estéreo) o **priors de dominio correcto** (DadaGP-metal, teoría musical), no reorganizar lo ya
+> transcrito (tempo/limpieza ciega fallaron).
