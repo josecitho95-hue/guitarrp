@@ -83,7 +83,8 @@ def main() -> int:
     ap.add_argument("--calibrate", action="store_true", help="Calibrar afinacion a A440 (SH-01)")
     ap.add_argument("--open-string-pref", default="media", choices=["alta", "media", "baja"],
                     help="Preferencia por cuerdas al aire (SH-02)")
-    ap.add_argument("--tuning", default="standard", choices=["standard", "drop_d"],
+    ap.add_argument("--tuning", default="standard",
+                    choices=["standard", "eb_standard", "d_standard", "drop_d", "drop_c"],
                     help="Afinación de la guitarra")
     ap.add_argument("--capo", type=int, default=0, help="Traste en el que se coloca el capo")
     ap.add_argument("--onset-threshold", type=float, default=0.5)

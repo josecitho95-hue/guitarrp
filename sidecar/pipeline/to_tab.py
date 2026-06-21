@@ -19,8 +19,11 @@ from .types import Note, TabNote
 STANDARD_TUNING = {1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 40}
 
 TUNINGS = {
-    "standard": STANDARD_TUNING,
+    "standard": STANDARD_TUNING,                                 # E A D G B E
+    "eb_standard": {1: 63, 2: 58, 3: 54, 4: 49, 5: 44, 6: 39},   # medio tono abajo (GnR, Hendrix, mucho hard rock)
+    "d_standard": {1: 62, 2: 57, 3: 53, 4: 48, 5: 43, 6: 38},    # un tono abajo
     "drop_d": {1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 38},
+    "drop_c": {1: 62, 2: 57, 3: 53, 4: 48, 5: 43, 6: 36},        # D estándar con 6ª en C
 }
 
 # Bajo de 4 cuerdas: 1=Sol -> 4=Mi grave (G2 D2 A1 E1).
