@@ -31,6 +31,35 @@ class PipelineParams:
     onset_threshold: float = 0.5
     min_note_ms: float = 80.0
     from_midi: bool = False
+    multi_instrument: bool = False    # guitarra + bajo en pistas separadas (requiere separate)
+
+
+def _stem_to_tab(stem_wav: str, params: PipelineParams, tuning: dict,
+                 min_freq: float, max_freq: float, mt3_progress=None):
+    """Transcribe un stem -> notas -> tablatura (con técnicas). Devuelve [] si vacío."""
+    if params.transcriber == "mr_mt3":
+        notes = transcribe.transcribe_mt3(
+            stem_wav, model="mr_mt3", device=params.device, progress=mt3_progress)
+    else:
+        notes = transcribe.transcribe_audio(
+            stem_wav, onset_threshold=params.onset_threshold,
+            min_note_length_ms=params.min_note_ms, min_freq=min_freq, max_freq=max_freq)
+    if not notes:
+        return []
+    tab = to_tab.assign_tab(notes, tuning=tuning, open_string_pref=params.open_string_pref)
+    return techniques.detect_techniques(tab)
+
+
+def _save_tab_json(work_dir: str, tab) -> None:
+    import json
+    data = [
+        {"pitch": n.pitch, "start": n.start, "end": n.end, "velocity": n.velocity,
+         "string": n.string, "fret": n.fret, "hopo": n.hopo, "slide": n.slide,
+         "vibrato": n.vibrato, "bend_type": n.bend_type, "bend_value": n.bend_value}
+        for n in tab
+    ]
+    with open(os.path.join(work_dir, "tab_notes.json"), "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
 
 def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
@@ -58,10 +87,55 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
         # Tempo automático del audio (override manual si auto_bpm=False).
         bpm = preprocess.estimate_tempo(wav) if params.auto_bpm else params.bpm
 
+        stems = None
         if params.separate:
             prog("separating", 0.2)
-            wav = separate.separate_guitar(wav, work_dir, device=params.device)
+            stems = separate.separate_all(wav, work_dir, device=params.device)
 
+        out_path = os.path.splitext(out_path)[0] + "." + params.output_format.lstrip(".")
+        guitar_tuning = to_tab.TUNINGS.get(params.tuning, to_tab.STANDARD_TUNING)
+        guitar_dig = guitar_tuning
+        if params.capo > 0:
+            guitar_dig = {s: p + params.capo for s, p in guitar_tuning.items()}
+
+        # --- Multi-instrumento: guitarra + bajo en pistas separadas ---
+        if params.multi_instrument and stems and "bass" in stems:
+            prog("transcribing", 0.4)
+
+            def _gtr_prog(frac, msg):
+                print(msg, flush=True)
+                prog("transcribing", 0.4 + 0.2 * frac)
+
+            def _bass_prog(frac, msg):
+                print(msg, flush=True)
+                prog("transcribing", 0.6 + 0.15 * frac)
+
+            guitar_tab = _stem_to_tab(stems.get("guitar", wav), params, guitar_dig,
+                                      transcribe.GUITAR_MIN_HZ, transcribe.GUITAR_MAX_HZ,
+                                      _gtr_prog)
+            prog("transcribing", 0.6)
+            bass_tab = _stem_to_tab(stems["bass"], params, to_tab.BASS_TUNING,
+                                    30.0, 500.0, _bass_prog)
+            if not guitar_tab and not bass_tab:
+                raise RuntimeError("No se detectaron notas en el audio.")
+
+            prog("tabbing", 0.8)
+            instruments = [
+                {"name": "Guitar", "tuning": guitar_tuning, "tab_notes": guitar_tab,
+                 "capo": params.capo, "midi_program": 30},
+                {"name": "Bass", "tuning": to_tab.BASS_TUNING, "tab_notes": bass_tab,
+                 "midi_program": 33},
+            ]
+            to_gp.write_multitrack_gp(instruments, out_path, bpm=bpm, title=title)
+            _save_tab_json(work_dir, guitar_tab)
+            prog("done", 1.0)
+            return {"output": out_path, "n_tab": len(guitar_tab) + len(bass_tab),
+                    "n_notes": len(guitar_tab) + len(bass_tab), "bpm": round(bpm, 1),
+                    "tracks": [i["name"] for i in instruments]}
+
+        # --- Single-track (guitarra) ---
+        if stems:
+            wav = stems.get("guitar", wav)
         prog("transcribing", 0.4)
         if params.transcriber == "mr_mt3":
             def _mt3_prog(frac, msg):
@@ -91,27 +165,7 @@ def run_pipeline(input_path: str, out_path: str, params: PipelineParams,
 
     out_path = os.path.splitext(out_path)[0] + "." + params.output_format.lstrip(".")
     to_gp.write_gp(tab, out_path, bpm=bpm, title=title, tuning=tuning_dict, capo=params.capo)
-
-    # Guardar tab_notes en un archivo JSON intermedio para re-procesado posterior
-    import json
-    notes_data = [
-        {
-            "pitch": n.pitch,
-            "start": n.start,
-            "end": n.end,
-            "velocity": n.velocity,
-            "string": n.string,
-            "fret": n.fret,
-            "hopo": n.hopo,
-            "slide": n.slide,
-            "vibrato": n.vibrato,
-            "bend_type": n.bend_type,
-            "bend_value": n.bend_value,
-        }
-        for n in tab
-    ]
-    with open(os.path.join(work_dir, "tab_notes.json"), "w", encoding="utf-8") as f:
-        json.dump(notes_data, f, indent=2)
+    _save_tab_json(work_dir, tab)
 
     prog("done", 1.0)
     return {"output": out_path, "n_notes": len(notes), "n_tab": len(tab), "bpm": round(bpm, 1)}

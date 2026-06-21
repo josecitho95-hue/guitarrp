@@ -23,6 +23,9 @@ TUNINGS = {
     "drop_d": {1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 38},
 }
 
+# Bajo de 4 cuerdas: 1=Sol -> 4=Mi grave (G2 D2 A1 E1).
+BASS_TUNING = {1: 43, 2: 38, 3: 33, 4: 28}
+
 MAX_FRET = 22
 ONSET_EPS = 0.035       # notas que empiezan dentro de esta ventana = acorde (s)
 MAX_EVENT_OPTIONS = 24  # poda de asignaciones por evento

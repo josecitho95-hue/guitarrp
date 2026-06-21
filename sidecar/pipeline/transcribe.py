@@ -157,8 +157,14 @@ def transcribe_mt3(audio_path: str, model: str = "mr_mt3",
 
 
 def transcribe_audio(audio_path: str, onset_threshold: float = 0.5,
-                     min_note_length_ms: float = 80.0) -> list[Note]:
-    """Transcribe un archivo de audio a notas usando Basic Pitch (backend ONNX)."""
+                     min_note_length_ms: float = 80.0,
+                     min_freq: float = GUITAR_MIN_HZ,
+                     max_freq: float = GUITAR_MAX_HZ) -> list[Note]:
+    """Transcribe un archivo de audio a notas usando Basic Pitch (backend ONNX).
+
+    `min_freq`/`max_freq` acotan el rango (guitarra por defecto). Para bajo usar
+    un mínimo más bajo (~30 Hz; E1≈41 Hz queda por debajo de los 70 Hz de guitarra).
+    """
     try:
         from basic_pitch.inference import predict
     except ImportError as exc:  # pragma: no cover
@@ -172,7 +178,7 @@ def transcribe_audio(audio_path: str, onset_threshold: float = 0.5,
         _basic_pitch_model(),
         onset_threshold=onset_threshold,
         minimum_note_length=min_note_length_ms,
-        minimum_frequency=GUITAR_MIN_HZ,
-        maximum_frequency=GUITAR_MAX_HZ,
+        minimum_frequency=min_freq,
+        maximum_frequency=max_freq,
     )
     return notes_from_pretty_midi(midi_data)

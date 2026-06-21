@@ -45,7 +45,7 @@ def run(args: argparse.Namespace) -> int:
         calibrate_tuning=args.calibrate, open_string_pref=args.open_string_pref,
         tuning=args.tuning, capo=args.capo,
         onset_threshold=args.onset_threshold, min_note_ms=args.min_note_ms,
-        from_midi=args.from_midi,
+        from_midi=args.from_midi, multi_instrument=args.multi_instrument,
     )
 
     try:
@@ -70,6 +70,8 @@ def main() -> int:
     ap.add_argument("--transcriber", default="mr_mt3", choices=["mr_mt3", "basic_pitch"],
                     help="Modelo audio->MIDI (def: mr_mt3, SOTA)")
     ap.add_argument("--separate", action="store_true", help="Aislar guitarra con Demucs")
+    ap.add_argument("--multi-instrument", action="store_true",
+                    help="Guitarra + bajo en pistas separadas (requiere --separate)")
     ap.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="Dispositivo Demucs")
     ap.add_argument("--bpm", type=float, default=None,
                     help="Tempo manual; si se omite, se detecta automaticamente")
