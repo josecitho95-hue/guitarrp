@@ -129,8 +129,11 @@ def test_techniques_bend_and_vibrato():
     pb = [(i * 0.05, 500 if i % 2 == 0 else 100) for i in range(10)] # oscilación entre 100 y 500
     n1 = TabNote(pitch=60, start=0.0, end=0.8, string=2, fret=1, pitch_bends=pb)
 
-    # Nota con pitch bend alto -> bend (8191 = 2 semitonos = 4 quarters)
-    pb_bend = [(0.0, 0), (0.2, 8191)]
+    # Nota con pitch bend alto -> bend (8191 = 2 semitonos = 4 quarters).
+    # Un bend real trae varios puntos intermedios; la detección (techniques.py)
+    # exige >= 3 puntos significativos para no confundir ruido espectral con un
+    # bend (umbral endurecido en el commit f116d96, que dio el 80% real).
+    pb_bend = [(0.0, 0), (0.05, 2000), (0.1, 5000), (0.15, 7000), (0.2, 8191)]
     n2 = TabNote(pitch=60, start=1.0, end=1.8, string=2, fret=1, pitch_bends=pb_bend)
 
     tab = techniques.detect_techniques([n1, n2])
