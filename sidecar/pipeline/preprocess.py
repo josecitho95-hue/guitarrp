@@ -28,51 +28,25 @@ def estimate_tuning_cents(in_path: str, sr: int = 22050) -> float:
 def estimate_tempo(audio_path: str, sr: int = 22050, default: float = 120.0) -> float:
     """Estima el tempo global (BPM) del audio con librosa.
 
-    Incluye corrección de half-time: librosa a menudo detecta la mitad del
-    tempo real en canciones rápidas (thrash metal, punk, etc.). Si el BPM
-    detectado cae en el rango 80-130 y la densidad de onsets sugiere un tempo
-    real más rápido, duplicamos el valor.
+    NO intenta auto-corregir la octava de tempo (doblar/halvar): medido sobre un
+    corpus (rock clásico + thrash), el doblado agresivo acertaba 1/7 canciones y
+    arruinaba el resto — la octava de tempo es ambigua desde audio. librosa crudo
+    acierta la mayoría de la música normal. Para el caso raro (thrash detectado a
+    mitad, p.ej. Master of Puppets 103→206) usar el override `--bpm`. El tempo solo
+    afecta la NOTACIÓN (compases), no el contenido de notas ni la métrica chroma.
     """
     try:
         import librosa
-        import numpy as np
     except ImportError:
         return default
     try:
         y, _ = librosa.load(audio_path, sr=sr, mono=True)
         if y.size == 0:
             return default
-        tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
         bpm = float(tempo if not hasattr(tempo, "__len__") else tempo[0])
         if not (30 <= bpm <= 300):
             return default
-
-        # --- Corrección half-time ---
-        # Si el BPM está en el rango típico de half-time (80-130), verificamos
-        # la densidad de onsets. Un onset rate > 5/s suele indicar que el tempo
-        # real es el doble del detectado (típico de thrash/speed metal).
-        if 80 <= bpm <= 130:
-            onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-            onsets = librosa.onset.onset_detect(y=y, sr=sr, onset_envelope=onset_env)
-            duration_s = len(y) / sr
-            if duration_s > 0:
-                onset_rate = len(onsets) / duration_s
-                # También verificamos con tempograma si hay energía en el doble
-                tempogram = librosa.feature.tempogram(onset_envelope=onset_env, sr=sr)
-                # Buscar energía en la banda del doble del tempo
-                bpm_axis = librosa.tempo_frequencies(tempogram.shape[0], sr=sr)
-                double_bpm = bpm * 2
-                # Buscar el bin más cercano al doble del tempo
-                double_idx = int(np.argmin(np.abs(bpm_axis - double_bpm)))
-                single_idx = int(np.argmin(np.abs(bpm_axis - bpm)))
-                double_energy = float(np.mean(tempogram[double_idx, :]))
-                single_energy = float(np.mean(tempogram[single_idx, :]))
-
-                # Si la densidad de onsets es alta O el tempograma muestra energía
-                # significativa en el doble, corregimos.
-                if onset_rate > 5.0 or (single_energy > 0 and double_energy / single_energy > 0.5):
-                    bpm = bpm * 2
-
         return round(bpm, 1)
     except Exception:
         return default
