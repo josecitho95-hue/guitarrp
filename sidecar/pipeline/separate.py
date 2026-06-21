@@ -116,9 +116,9 @@ def separate_stereo(in_path: str, out_dir: str, device: str = "cpu") -> dict[str
     dir_r = _run_demucs(rpath, out_dir, device)
     out["guitar_l"] = os.path.join(dir_l, "other.wav")
     out["guitar_r"] = os.path.join(dir_r, "other.wav")
-    # Bajo y batería del mix completo (centrados; el paneo no importa).
+    # Bajo, batería y voz del mix completo (centrados / el paneo no importa).
     dir_full = _run_demucs(in_path, out_dir, device)
-    for inst in ("bass", "drums"):
+    for inst in ("bass", "drums", "vocals"):
         p = os.path.join(dir_full, f"{inst}.wav")
         if os.path.exists(p):
             out[inst] = p
