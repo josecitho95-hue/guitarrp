@@ -161,6 +161,17 @@ pendiente:** detectar la afinación desde audio es AMBIGUO (mismas alturas; el h
 traste-medio no separa Eb de estándar). Posible vía futura: probar candidatas y elegir por
 idiomática + contexto, o pedir al usuario (la sabe del tab oficial). 🟢
 
+### Notación rítmica (🟠 patrón clave del metal)
+**RHY-01 — Cuantización de tresillos / galope.** *Etapa 5 (to_gp).* Nuestra cuantización es a
+semicorcheas (rejilla de 16/compás) y **no puede representar tresillos**. Medido en The Trooper
+(Iron Maiden): el oficial usa **606 tresillos (3:2) = 21% de los beats de guitarra** (el galope
+"da-da-dum"), omnipresente en NWOBHM/thrash. Sin tresillos el tab se ve mal para cualquier
+guitarrista. *Solución:* rejilla de 48/compás (12 subdiv/beat soporta 16ths Y tresillos),
+detección y emisión de tuplets GP (`beat.duration.tuplet`). *Impacto:* 🟠 medio-alto — toca la
+cuantización de `to_gp` (afecta todas las canciones + `structure.py` + tests → validar regresión).
+Mejora sobre todo la NOTACIÓN (el DTW podría no moverse: los errores de tiempo de tresillo son
+sub-ventana). Considerar opt-in (`--triplets`) para evitar regresión. *Hallazgo: sesión 21 jun.*
+
 ### Priors de dominio correcto (🟡 arregla el desajuste GuitarSet→metal)
 **MG-02 — Matriz de inhibición desde DadaGP-metal.** Reconstruir `models/inhibition.npz` (ver
 `scripts/build_inhibition.py`) desde tabs de **metal** (DadaGP o colección GP propia) en vez de
