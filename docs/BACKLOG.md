@@ -127,6 +127,12 @@ Puppets y se probaron levers de calidad con datos (todo mergeado a `main`):
 **Conclusión:** el objetivo ("borrador editable multipista de alta calidad") está cumplido. El
 test `test_techniques_bend_and_vibrato` se corrigió (bend realista ≥3 puntos); suite en 28 verdes.
 
+> **Análisis detallado de calidad (escalas, pentatónicas, tónica, repetición, techo) en
+> [`ANALISIS_CALIDAD.md`](ANALISIS_CALIDAD.md).** Hallazgo definitivo: el oficial es MÁS cromático
+> (88.6% en escala) que nuestra transcripción (94%) → ninguna corrección por escala/tónica ayuda; la
+> música real excede el prior. Lo que funciona = añadir información (estéreo); lo que no = limpiar/
+> reorganizar lo transcrito.
+
 ---
 
 ## Propuestas de mejora — investigación web/literatura (2026-06-20)
@@ -181,6 +187,13 @@ el 16% a revisar". **Top-3: mayor multiplicador real de productividad.** Requier
 (= errores probables) para revisión dirigida. 🟡
 **UX-03 — Prior por recuperación de tabs.** Para canciones famosas, alinear/validar contra tab
 comunitaria existente (fallback a transcripción pura). 🟠
+**UX-04 — "Arregla un riff una vez, propágalo a sus repeticiones".** *RF-07 (HITL) + structure.py.*
+La detección de riffs repetidos FUNCIONA (34 clusters en MoP; ver `ANALISIS_CALIDAD.md` §5), pero
+auto-aplicar consenso EMPEORA (borra variación legítima). El valor está en HITL: detectar grupos de
+riffs repetidos y, cuando el usuario corrige uno, ofrecer **propagar la corrección a todas sus
+instancias**. Combina lo que funciona (detección) con el lever real (revisión humana). Misma
+detección alimenta el etiquetado de secciones (LLM-01) y mostrar estructura en el visor.
+**Top recomendado actual.** Cimiento Python (`structure.py`) contenido; consumo UI después. 🟡
 
 ### Creativas / exploratorias (🟣)
 **CR-01 — Huella de estilo de ejecución** (densidad palm-mute, tipo de vibrato).
