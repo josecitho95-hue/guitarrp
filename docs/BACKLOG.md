@@ -5,6 +5,22 @@ etapa/componente del pipeline afectado.
 
 ---
 
+## Prioridad alta — Calidad (lever de fidelidad)
+
+**MG-01 — Modelo de transcripción específico de guitarra** 🎯
+*Etapa 3 (Audio→MIDI).* Hoy usamos `basic_pitch` (~0.73 F1, genérico) y `mr_mt3` (multi-
+instrumento, sobre-transcribe en mezcla densa). Ninguno está entrenado en guitarra. El
+contenido global ya es ~99%, pero la fidelidad nota-a-nota tiene techo.
+*Solución:* integrar un modelo específico de guitarra (candidato: **High-Resolution Guitar
+Transcription**, ~0.88 F1 GuitarSet; alternativa **FretNet**) detrás de la misma firma
+`list[Note]`. **Documento de implementación completo: [`MODELO_GUITARRA.md`](MODELO_GUITARRA.md)**
+(contrato, pasos, validación, riesgos, criterios de aceptación).
+*Impacto:* 🟠 medio-alto esfuerzo (conseguir/portar pesos), pero **aislado a la etapa 3**:
+nada de aguas abajo (inhibición, tab, técnicas, GP, estéreo, multipista) requiere cambios.
+Es el **único lever de fidelidad que queda** tras agotar el resto (ver nota de cierre).
+
+---
+
 ## Should Have
 
 Mejoras de bajo impacto en el código y alto valor de calidad: aditivas, aisladas, sin tocar la
@@ -37,14 +53,16 @@ No necesarias para el MVP; se consideran en futuras sesiones.
 
 ### 1. Mundo acústico real: tempo dinámico
 
-**CH-02 — Mapa de tempo dinámico (vs. BPM estático)**
+**CH-02 — Mapa de tempo dinámico (vs. BPM estático)** — ⚠️ *PROBADO, SIN MEJORA con `librosa`*
 *Etapa 5 (Tab → Guitar Pro).* Piezas con rubato, acelerando/desacelerando (clásico, solos
-expresivos) no mantienen un BPM robótico. Asumir un BPM global (F5) desalinea los compases
-hacia la mitad de la canción.
-*Solución:* extraer un mapa de tempo dinámico (beat tracker de `librosa`/`madmom`) e inyectar
-cambios de tempo explícitos por compás en el `.gp5`, en lugar de un único número al inicio.
-*Impacto:* 🟠 medio — reescribe la cuantización de `to_gp.py` (aislado a ese módulo). Hacerlo en
-su propia iteración con test de regresión.
+expresivos) no mantienen un BPM robótico. Asumir un BPM global (F5) desalinea los compases.
+*Estado (2026-06-20):* la **infraestructura está implementada y mergeada, apagada por defecto**
+(`preprocess.estimate_beats`, `to_gp._make_to_slot`/`_write_tempo_map`, `beats=None` → grid fijo).
+Medido sobre Master of Puppets: **DTW 76.0 vs 76.2 → no mejora**, porque `librosa` no da tempo
+dinámico real (pulso ~constante; no captura secciones lentas) y el cuello de botella resultó ser
+la precisión de notas, no el ritmo. **Solo se reactivaría con un beat-tracker dinámico real
+(`madmom`, no instalado/frágil en Windows).** No re-intentar con librosa.
+*Impacto:* 🟠 medio (ya hecho); reactivación requiere `madmom`.
 
 ### 2. Casos extremos en la matriz de inhibición
 
@@ -81,3 +99,32 @@ opcionalmente, el MIDI ligero).
 
 > Origen: observaciones de revisión tras cerrar Fase 1 (2026-06-20). SH-01 y SH-02 promovidos
 > desde Could Have por bajo impacto y alto valor. Reevaluar el resto al planificar Fase 2+.
+
+---
+
+## Bitácora de la sesión de calidad (2026-06-20)
+
+Tras retomar el proyecto se validó el flujo end-to-end contra un GP oficial de Master of
+Puppets y se probaron levers de calidad con datos (todo mergeado a `main`):
+
+**Hecho / mergeado:**
+- **Fix KV-cache de mr_mt3** (PR #1): de inviable (>2 h) a ~3.8 min (>60x), tokens idénticos
+  validados. Desbloqueó el modelo SOTA y la transcripción de batería.
+- **Score multipista** (PR #1): Guitar + Bass + Drums (percusión en canal MIDI 10).
+- **Transcripción estéreo** (PR #2): recupera las 2 guitarras paneadas L/R. **DTW 76% → 84%**
+  — el único lever que mejoró la fidelidad de forma medible (añade información del paneo).
+- Herramientas: `scripts/compare_gp.py` (DTW + chroma), `scripts/compare_excerpt.py`
+  (subsecuencia), `scripts/validate_kvcache.py`.
+
+**Probado y DESCARTADO con datos (NO re-intentar igual):**
+- **Tempo dinámico** con librosa: sin mejora (ver CH-02). Necesita `madmom`.
+- **Limpieza de notas** (quitar octavas dobladas / notas cortas): sin mejora; el dedup de
+  octavas incluso empeora (quita notas reales). El metric chroma es insensible a esto.
+- **Más pistas** (lead/Gtr.3, etc.): no mejora fidelidad. Verificado: añadir el lead oficial a
+  la referencia mueve DTW solo +0.3; las 2 rítmicas ya son el 98% del contenido. Llegamos al
+  techo de información del estéreo (2 canales → 2 guitarras, ambas extraídas).
+
+**Conclusión:** el objetivo ("borrador editable multipista de alta calidad") está cumplido. El
+único lever de fidelidad pendiente es **MG-01** (modelo específico de guitarra). El test
+`test_techniques_bend_and_vibrato` falla por estar desactualizado vs el código endurecido
+(commit f116d96), no es un bug del pipeline.
